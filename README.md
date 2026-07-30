@@ -155,9 +155,16 @@ arctis notify off      # disable
 arctis notify on       # enable
 ```
 
-The setting is written into the LaunchAgent plist as an explicit `--notify` or
-`--no-notify` argument, so it survives `start`, `stop` and `enable`, and does
-not silently change if the built-in default ever does.
+The setting lives in `~/Library/Application Support/ArctisNovaPro/settings.json`
+and takes effect **immediately** — the daemon re-reads it per notification, so
+there is no restart and no plist rewrite.
+
+It is deliberately a separate file from `state.json`: that one is daemon-owned
+and rewritten on every device switch, so sharing it would let a settings edit
+and a headset toggle race, with one write silently lost.
+
+`--notify` / `--no-notify` override the saved setting for a single foreground
+run; the LaunchAgent passes neither and follows the file.
 
 > Banners are posted with `osascript`, so macOS attributes them to
 > **Script Editor** rather than to this tool, and they are suppressed if
@@ -215,6 +222,25 @@ but their report formats are not verified here, and shipping untested device
 support mostly generates bug reports nobody can reproduce. If you have another
 model, `tools/probe.swift` will tell you what it emits; a capture in an issue is
 very welcome.
+
+## Updating
+
+```sh
+arctis update
+```
+
+Checks the latest release, and if it differs from what you have, downloads it,
+**verifies the checksum before installing**, and swaps it in. It restarts the
+daemon only if it was already running, and leaves the LaunchAgent plist
+untouched unless the binary path actually changed — the plist carries no
+preferences, so a normal in-place upgrade never rewrites it.
+
+Your settings and remembered devices live outside the install directory, so
+they survive an update.
+
+In a git checkout it refuses to run and points you at
+`git pull && arctis build` instead, rather than replacing the directory and
+destroying your history.
 
 ## Uninstalling
 

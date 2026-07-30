@@ -10,7 +10,7 @@ import Foundation
 
 setvbuf(stdout, nil, _IONBF, 0)
 
-let version = "1.1.0"
+let version = "1.2.0"
 
 // ---------------------------------------------------------------- paths
 
@@ -18,19 +18,35 @@ let appSupport = FileManager.default
     .homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/ArctisNovaPro", isDirectory: true)
 let stateURL = appSupport.appendingPathComponent("state.json")
+let settingsURL = appSupport.appendingPathComponent("settings.json")
+
+Notifier.settingsURL = settingsURL
 
 // ---------------------------------------------------------------- args
 
 var verbose = false
 var command = "run"
+var setNotifyValue: Bool?
 
-for arg in CommandLine.arguments.dropFirst() {
+var argv = Array(CommandLine.arguments.dropFirst())
+var argIndex = 0
+while argIndex < argv.count {
+    let arg = argv[argIndex]
     switch arg {
     case "-v", "--verbose": verbose = true
-    // Both spellings exist so the LaunchAgent plist can state its intent
-    // explicitly rather than depending on whatever the built-in default is.
-    case "--notify": Notifier.enabled = true
-    case "--no-notify": Notifier.enabled = false
+    // Override the stored setting for this run only - for foreground use.
+    // The LaunchAgent passes neither and follows settings.json.
+    case "--notify": Notifier.override = true
+    case "--no-notify": Notifier.override = false
+    case "--set-notify":
+        argIndex += 1
+        guard argIndex < argv.count, ["on", "off"].contains(argv[argIndex]) else {
+            FileHandle.standardError.write("--set-notify requires on|off\n".data(using: .utf8)!)
+            exit(2)
+        }
+        setNotifyValue = argv[argIndex] == "on"
+        command = "set-notify"
+    case "--get-notify": command = "get-notify"
     case "--list": command = "list"
     case "--status": command = "status"
     case "--version": command = "version"
@@ -39,6 +55,7 @@ for arg in CommandLine.arguments.dropFirst() {
         FileHandle.standardError.write("unknown argument: \(arg)\n".data(using: .utf8)!)
         exit(2)
     }
+    argIndex += 1
 }
 
 let timeFormatter: DateFormatter = {
@@ -64,8 +81,11 @@ case "help":
 
       (no args)     run in the foreground, watching for headset power events
       -v, --verbose extra logging
-      --notify      show a notification banner when devices switch (default)
-      --no-notify   do not show a banner
+      --notify      force banners on for this run, ignoring the saved setting
+      --no-notify   force banners off for this run
+      --set-notify on|off
+                    save the banner preference to settings.json
+      --get-notify  print the saved banner preference
       --status      show current and remembered devices, then exit
       --list        list all CoreAudio devices, then exit
       --version     print version
@@ -77,6 +97,18 @@ case "help":
 
 case "version":
     print(version)
+    exit(0)
+
+// The daemon owns settings.json so nothing else has to parse or emit JSON.
+case "set-notify":
+    var settings = Settings.load(from: settingsURL)
+    settings.notifications = setNotifyValue ?? true
+    guard settings.save(to: settingsURL) else { exit(1) }
+    print(settings.notifications ? "on" : "off")
+    exit(0)
+
+case "get-notify":
+    print(Settings.load(from: settingsURL).notifications ? "on" : "off")
     exit(0)
 
 case "list":

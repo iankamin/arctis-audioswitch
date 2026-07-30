@@ -96,31 +96,27 @@ plist_binary() {
   /usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" 2>/dev/null
 }
 
-# Notification banners are on unless the plist explicitly says otherwise.
-# Reading the setting back out of the plist keeps it sticky across
-# start/stop/enable without a second config file to keep in sync.
-notify_enabled() {
-  [ -f "$PLIST" ] || return 0
-  ! /usr/libexec/PlistBuddy -c "Print :ProgramArguments" "$PLIST" 2>/dev/null \
-    | grep -q -- '--no-notify'
+# The banner preference lives in settings.json, owned by the daemon binary.
+# Keeping it out of the plist means changing it needs no plist rewrite and no
+# restart - the daemon re-reads it per notification - and it leaves the plist
+# stable so `update` only touches it when the binary path actually changes.
+notify_setting() {
+  [ -x "$BIN" ] || { echo "on"; return 0; }
+  "$BIN" --get-notify 2>/dev/null || echo "on"
 }
 
 need_binary() {
   [ -x "$BIN" ] || die "daemon not built - run: $0 build"
 }
 
-# Writes the plist with RunAtLoad set to $1 (true|false) and the notification
-# flag set to $2 (on|off).
+# Writes the plist with RunAtLoad set to $1 (true|false).
+#
+# Deliberately contains no preference flags: the only thing here that can vary
+# per machine is the binary path, so the plist stays byte-stable across
+# upgrades and `update` can leave it alone.
 write_plist() {
   local run_at_load="$1"
-  local notify="${2:-on}"
   need_binary
-
-  # Always write the flag explicitly so the plist records intent, rather than
-  # inheriting whatever the binary's compiled-in default happens to be.
-  local notify_flag="--notify"
-  [ "$notify" = "off" ] && notify_flag="--no-notify"
-
   mkdir -p "$(dirname "$PLIST")" "$LOG_DIR"
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -132,7 +128,6 @@ write_plist() {
     <key>ProgramArguments</key>
     <array>
         <string>${BIN}</string>
-        <string>${notify_flag}</string>
     </array>
     <key>RunAtLoad</key>
     <${run_at_load}/>
@@ -184,10 +179,8 @@ cmd_start() {
   fi
   # Preserve the current login setting; starting now should not silently
   # enable or disable start-at-login.
-  # Preserve both existing settings; starting now should change neither
-  # start-at-login nor the notification preference.
-  local notify="off"; notify_enabled && notify="on"
-  if runs_at_login; then write_plist true "$notify"; else write_plist false "$notify"; fi
+  # Preserve the login setting; starting now should not change it.
+  if runs_at_login; then write_plist true; else write_plist false; fi
   reload_job
   launchctl kickstart "$TARGET" >/dev/null 2>&1
   sleep 0.5
@@ -230,8 +223,7 @@ cmd_stop() {
 
 cmd_enable() {
   need_binary
-  local notify="off"; notify_enabled && notify="on"
-  write_plist true "$notify"
+  write_plist true
   reload_job
   launchctl kickstart "$TARGET" >/dev/null 2>&1
   sleep 0.5
@@ -278,11 +270,7 @@ cmd_status() {
     echo "  at login:    disabled"
   fi
 
-  if notify_enabled; then
-    echo "  banners:     on"
-  else
-    echo "  banners:     off"
-  fi
+  echo "  banners:     $(notify_setting)"
 
   # A plist pointing at a moved or deleted build is the most likely way this
   # setup silently breaks, so check for it explicitly.
@@ -310,30 +298,120 @@ cmd_status() {
   done
 }
 
+REPO="iankamin/arctis-audioswitch"
+ASSET="arctis-audioswitch-macos-arm64.tar.gz"
+
+latest_version() {
+  # Single field out of the releases API - not worth requiring jq for.
+  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+    | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' \
+    | head -1
+}
+
+installed_version() {
+  [ -x "$BIN" ] || return 1
+  "$BIN" --version 2>/dev/null
+}
+
+cmd_update() {
+  local force=0
+  [ "${1:-}" = "--force" ] && force=1
+
+  local current latest
+  current="$(installed_version)" || die "daemon not built or not installed"
+  latest="$(latest_version)"
+  [ -n "$latest" ] || die "could not reach GitHub to check for updates"
+
+  echo "installed: $current"
+  echo "latest:    $latest"
+
+  if [ "$current" = "$latest" ] && [ "$force" = "0" ]; then
+    echo "already up to date"
+    return 0
+  fi
+
+  # Source checkouts have their own git history; replacing the directory
+  # wholesale would blow it away.
+  if [ -d "$PROJECT_DIR/.git" ]; then
+    die "this is a git checkout - use 'git pull && $(basename "$0") build' instead"
+  fi
+
+  local tmp; tmp="$(mktemp -d)" || die "could not create temp dir"
+  echo "downloading $latest..."
+  ( cd "$tmp" \
+    && curl -fsSLO "https://github.com/${REPO}/releases/latest/download/${ASSET}" \
+    && curl -fsSLO "https://github.com/${REPO}/releases/latest/download/${ASSET}.sha256" \
+  ) || { rm -rf "$tmp"; die "download failed"; }
+
+  ( cd "$tmp" && shasum -a 256 -c "${ASSET}.sha256" >/dev/null 2>&1 ) \
+    || { rm -rf "$tmp"; die "checksum mismatch - refusing to install"; }
+  echo "checksum verified"
+
+  ( cd "$tmp" && tar -xzf "$ASSET" ) || { rm -rf "$tmp"; die "extract failed"; }
+  local staged="$tmp/arctis-audioswitch"
+  [ -x "$staged/build/arctis-audioswitch" ] || { rm -rf "$tmp"; die "tarball layout unexpected"; }
+
+  local was_running=0
+  is_loaded && was_running=1
+  local at_login=0
+  runs_at_login && at_login=1
+
+  # This script is about to be overwritten, and bash reads scripts
+  # incrementally - replacing the file underneath a running shell can make it
+  # execute garbage. Hand the swap to a separate script and exec into it, so
+  # nothing is reading bin/arctis while it changes.
+  local swap="$tmp/swap.sh"
+  cat > "$swap" <<SWAPEOF
+#!/bin/bash
+set -uo pipefail
+[ "$was_running" = "1" ] && launchctl bootout "$TARGET" >/dev/null 2>&1
+
+rm -rf "$PROJECT_DIR.old"
+mv "$PROJECT_DIR" "$PROJECT_DIR.old" || { echo "could not move old install" >&2; exit 1; }
+mv "$staged" "$PROJECT_DIR" || {
+  echo "install failed, rolling back" >&2
+  mv "$PROJECT_DIR.old" "$PROJECT_DIR"
+  exit 1
+}
+rm -rf "$PROJECT_DIR.old"
+
+# Only rewrite the plist if the recorded binary path is actually wrong.
+# Rewriting it unconditionally would churn a file launchd is watching for no
+# reason, and would reset RunAtLoad if that logic ever drifted.
+recorded="\$(/usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" 2>/dev/null)"
+if [ -f "$PLIST" ] && [ "\$recorded" != "$BIN" ]; then
+  echo "binary path changed, updating LaunchAgent"
+  echo "  was: \$recorded"
+  echo "  now: $BIN"
+  "$PROJECT_DIR/bin/arctis" enable >/dev/null 2>&1
+elif [ "$was_running" = "1" ]; then
+  launchctl bootstrap "gui/${UID_NUM}" "$PLIST" >/dev/null 2>&1
+  launchctl kickstart "$TARGET" >/dev/null 2>&1
+  echo "LaunchAgent unchanged; restarted daemon"
+else
+  echo "LaunchAgent unchanged"
+fi
+
+echo "updated to \$("$BIN" --version 2>/dev/null)"
+rm -rf "$tmp"
+SWAPEOF
+  chmod +x "$swap"
+  exec /bin/bash "$swap"
+}
+
 cmd_notify() {
   local want="${1:-}"
   case "$want" in
+    ""|status) echo "notifications: $(notify_setting)"; return 0 ;;
     on|off) ;;
-    ""|status)
-      if notify_enabled; then echo "notifications: on"; else echo "notifications: off"; fi
-      return 0
-      ;;
     *) die "usage: $(basename "$0") notify [on|off]" ;;
   esac
 
-  if [ ! -f "$PLIST" ]; then
-    die "not installed as a LaunchAgent - run '$(basename "$0") enable' first"
-  fi
-
-  local run_at_load="false"; runs_at_login && run_at_load="true"
-  write_plist "$run_at_load" "$want"
-
-  # Only restart if it was actually running; the flag is read at startup.
-  if is_loaded; then
-    reload_job
-    launchctl kickstart "$TARGET" >/dev/null 2>&1
-  fi
-  echo "notifications: $want"
+  need_binary
+  # The daemon re-reads settings.json per notification, so this takes effect
+  # immediately - no plist rewrite and no restart.
+  "$BIN" --set-notify "$want" >/dev/null || die "could not save setting"
+  echo "notifications: $(notify_setting)"
 }
 
 cmd_logs() {
@@ -365,10 +443,12 @@ ${bold}COMMANDS${reset}
   enable         start at login, and start now
   disable        do not start at login, and stop now
 
-  status         show whether it is running, enabled, and current audio state
+  status          show whether it is running, enabled, and current audio state
   notify [on|off] show or set notification banners on device switches
-  logs [-f]      show recent log output, -f to follow
-  build          rebuild from source (source checkouts only)
+  logs [-f]       show recent log output, -f to follow
+
+  update          download and install the latest release
+  build           rebuild from source (source checkouts only)
 
   install        symlink 'arctis' into ~/.local/bin so it works from anywhere
   uninstall-cli  remove just that symlink
@@ -391,6 +471,13 @@ ${bold}NOTES${reset}
   Do not keep this folder in ~/Downloads, ~/Desktop or ~/Documents: those are
   TCC-protected, so macOS will prompt at login and the daemon fails to start
   if denied. ~/.local/share is a good place.
+
+  'notify' is stored in settings.json and takes effect immediately - the
+  daemon re-reads it per notification, so no restart is needed.
+
+  'update' verifies the checksum before installing, and leaves the LaunchAgent
+  plist alone unless the binary path actually changed. It refuses to run in a
+  git checkout - use 'git pull && arctis build' there.
 
   'build' needs a source checkout; the release tarball ships a prebuilt binary.
 
@@ -454,6 +541,7 @@ case "${1:-help}" in
   enable)    cmd_enable ;;
   disable)   cmd_disable ;;
   status)    cmd_status ;;
+  update)    shift; cmd_update "${1:-}" ;;
   notify)    shift; cmd_notify "${1:-}" ;;
   logs)      shift; cmd_logs "${1:-}" ;;
   build)     cmd_build ;;

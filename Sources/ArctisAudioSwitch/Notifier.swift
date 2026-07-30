@@ -11,8 +11,22 @@ import Foundation
 
 enum Notifier {
 
-    /// Disabled with `--no-notify`.
-    static var enabled = true
+    /// Where the preference lives. Set once at startup.
+    static var settingsURL: URL?
+
+    /// Set by `--notify` / `--no-notify`, which win over the stored setting.
+    /// Intended for foreground runs; the LaunchAgent passes neither, so the
+    /// daemon follows settings.json.
+    static var override: Bool?
+
+    /// Re-read per post rather than cached at startup, so `arctis notify off`
+    /// takes effect immediately instead of needing the daemon restarted.
+    /// Switches are rare, so the cost is irrelevant.
+    static var enabled: Bool {
+        if let override = override { return override }
+        guard let url = settingsURL else { return Settings.defaults.notifications }
+        return Settings.load(from: url).notifications
+    }
 
     /// Escapes a Swift string into an AppleScript string literal.
     /// Device names are user-controlled (they can be renamed in Audio MIDI
