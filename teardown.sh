@@ -204,7 +204,16 @@ say ""
 if [ "$DRY" = "1" ]; then
   say "Dry run complete."
 elif [ "$leftover" = "0" ]; then
-  say "All external resources removed. Safe to delete the project folder."
+  say "All external resources removed."
+  say ""
+  # Name the directory explicitly. "Delete the project folder" is not
+  # actionable for someone who unpacked a release months ago and no longer
+  # remembers where it went.
+  say "The program itself is still on disk at:"
+  say "  $PROJECT_DIR"
+  say ""
+  say "Delete that folder to finish removing it:"
+  say "  rm -rf \"$PROJECT_DIR\""
 else
   say "Some resources remain - see above."
   exit 1
