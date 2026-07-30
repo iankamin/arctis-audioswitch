@@ -45,9 +45,13 @@ jobs:
 
       - name: Assemble tarball
         run: |
-          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
-          VERSION="${TAG#v}"
-          STAGE="arctis-audioswitch-${VERSION}"
+          # Deliberately NO version in the asset name or the extracted
+          # directory. GitHub's /releases/latest/download/<name> needs an exact
+          # filename, so embedding the version there would force users to know
+          # the version before they can fetch "the latest" - and a wrong guess
+          # silently downloads a 404 page into a .tar.gz. The release tag
+          # carries the version; `arctis-audioswitch --version` reports it.
+          STAGE="arctis-audioswitch"
 
           mkdir -p "$STAGE/bin" "$STAGE/build"
           # bin/arctis resolves its own location and falls back to build/,
@@ -58,21 +62,50 @@ jobs:
           chmod +x "$STAGE/bin/arctis" "$STAGE/teardown.sh" \
                    "$STAGE/build/arctis-audioswitch"
 
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          VERSION="${TAG#v}"
+
+          # Two names for the same tarball:
+          #   unversioned - what /releases/latest/download/ resolves, so the
+          #                 README install line needs no substitution
+          #   versioned   - pinnable and unambiguous when browsing an older
+          #                 release page
+          # Both extract to ./arctis-audioswitch, so the documented
+          # `cd arctis-audioswitch` works either way.
           ASSET="${STAGE}-macos-arm64.tar.gz"
+          ASSET_VERSIONED="${STAGE}-${VERSION}-macos-arm64.tar.gz"
+
           tar -czf "$ASSET" "$STAGE"
+          cp "$ASSET" "$ASSET_VERSIONED"
           shasum -a 256 "$ASSET" > "$ASSET.sha256"
+          shasum -a 256 "$ASSET_VERSIONED" > "$ASSET_VERSIONED.sha256"
+
           echo "ASSET=$ASSET" >> "$GITHUB_ENV"
+          echo "ASSET_VERSIONED=$ASSET_VERSIONED" >> "$GITHUB_ENV"
 
       - name: Smoke-test the tarball
         run: |
-          # Catches a layout mistake before anyone downloads it. The daemon
-          # itself needs the hardware, so only check the CLI wiring.
+          # Runs the README's exact install sequence against the real artifact,
+          # so a broken layout or a stale doc fails the release instead of
+          # reaching users. The daemon needs the hardware, so only the CLI
+          # wiring is checked here.
           TMP="$(mktemp -d)"
-          tar -xzf "$ASSET" -C "$TMP"
-          EXTRACTED="$(find "$TMP" -maxdepth 1 -type d -name 'arctis-audioswitch-*')"
-          "$EXTRACTED/bin/arctis" --help > /dev/null
-          test -x "$EXTRACTED/build/arctis-audioswitch"
+          cp "$ASSET" "$TMP/"
+          cd "$TMP"
+          tar -xzf "$ASSET"
+          cd arctis-audioswitch
+          test -x build/arctis-audioswitch
+          test -x bin/arctis
+          ./bin/arctis --help > /dev/null
+          ./build/arctis-audioswitch --version
           echo "tarball layout OK"
+
+      - name: Verify both assets are identical
+        run: |
+          # They must be byte-identical - a mismatch would mean the pinned and
+          # unpinned downloads ship different code.
+          cmp "$ASSET" "$ASSET_VERSIONED"
+          echo "assets match"
 
       - name: Publish release
         env:
@@ -81,6 +114,7 @@ jobs:
           TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
           gh release create "$TAG" \
             "$ASSET" "$ASSET.sha256" \
+            "$ASSET_VERSIONED" "$ASSET_VERSIONED.sha256" \
             --title "$TAG" \
             --generate-notes \
             --verify-tag

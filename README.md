@@ -40,20 +40,41 @@ one, so there is **no Input Monitoring prompt** and no kernel extension.
 
 ### From a release
 
+Always fetches the latest version — nothing to substitute:
+
 ```sh
-# Replace VERSION with the latest tag, e.g. 1.0.0
-curl -LO https://github.com/iankamin/arctis-audioswitch/releases/latest/download/arctis-audioswitch-VERSION-macos-arm64.tar.gz
-tar -xzf arctis-audioswitch-VERSION-macos-arm64.tar.gz
-cd arctis-audioswitch-VERSION
+curl -LO https://github.com/iankamin/arctis-audioswitch/releases/latest/download/arctis-audioswitch-macos-arm64.tar.gz
+tar -xzf arctis-audioswitch-macos-arm64.tar.gz
+cd arctis-audioswitch
 ./bin/arctis install    # symlink `arctis` into ~/.local/bin
 arctis enable           # start now, and at every login
 ```
 
-macOS will quarantine a downloaded binary. If Gatekeeper blocks it:
+`install` symlinks into `~/.local/bin`, so **keep the extracted folder** —
+deleting it breaks the command. Move it somewhere permanent first if you
+downloaded to `~/Downloads`, then re-run `./bin/arctis install`.
+
+To pin a specific version instead, every release also ships a versioned copy
+of the same tarball, e.g.
+`arctis-audioswitch-1.0.0-macos-arm64.tar.gz`. Both extract to
+`arctis-audioswitch/`, so the steps above are unchanged.
+
+Each asset has a matching `.sha256`:
 
 ```sh
-xattr -d com.apple.quarantine build/arctis-audioswitch
+shasum -a 256 -c arctis-audioswitch-macos-arm64.tar.gz.sha256
 ```
+
+The released binary is ad-hoc signed, not notarized. Downloading through a
+browser sets a quarantine flag that Gatekeeper will block; `curl` does not.
+If you hit *"cannot be opened because the developer cannot be verified"*:
+
+```sh
+xattr -dr com.apple.quarantine arctis-audioswitch
+```
+
+No `sudo` is needed at any point — everything installs under your home
+directory, and the LaunchAgent runs as you rather than as root.
 
 ### From source
 
