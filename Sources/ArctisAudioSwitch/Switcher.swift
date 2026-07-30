@@ -131,32 +131,72 @@ final class Switcher {
         }
     }
 
+    /// Startup is not the same as a live disconnect.
+    ///
+    /// On a live disconnect the Arctis is the current default and must be
+    /// replaced. At startup with the headset already off, the current devices
+    /// are whatever the user chose, and forcing the built-in speakers would
+    /// override a perfectly good setting - which is exactly what a fresh
+    /// install used to do, hijacking output to the laptop speakers on first
+    /// launch. Only intervene if a default is stale, i.e. still the Arctis.
+    func applyInitial(_ headset: HeadsetState) {
+        guard headset == .disconnected else {
+            switchToArctis()
+            return
+        }
+
+        var untouched: [String] = []
+        for scope in [Scope.output, Scope.input] {
+            guard let current = Audio.currentDefault(scope) else { continue }
+            if isArctis(current) {
+                restoreFallback(for: scope)
+            } else {
+                // Adopt what is already in use as the fallback baseline.
+                switch scope {
+                case .output: state.lastOutputUID = current.uid
+                case .input: state.lastInputUID = current.uid
+                }
+                untouched.append("\(scope.label)=\(current.name)")
+            }
+        }
+        save()
+        if !untouched.isEmpty {
+            log("headset already off; leaving \(untouched.joined(separator: ", ")) as-is")
+        }
+    }
+
     private func restoreFallback() {
         suppressObservationUntil = Date().addingTimeInterval(2.0)
         for scope in [Scope.output, Scope.input] {
-            let savedUID = scope == .output ? state.lastOutputUID : state.lastInputUID
+            restoreFallback(for: scope)
+        }
+    }
 
-            // Saved device first; built-in only if it is missing or unplugged.
-            var target: AudioDevice? = nil
-            if let uid = savedUID, let saved = Audio.device(uid: uid),
-               saved.supports(scope), !isArctis(saved) {
-                target = saved
-            } else {
-                target = Audio.builtIn(for: scope)
-                if savedUID != nil && target != nil {
-                    log("headset off: saved \(scope.label) device unavailable, using built-in")
-                }
-            }
+    private func restoreFallback(for scope: Scope) {
+        suppressObservationUntil = Date().addingTimeInterval(2.0)
 
-            guard let device = target else {
-                log("headset off: no \(scope.label) device available")
-                continue
+        let savedUID = scope == .output ? state.lastOutputUID : state.lastInputUID
+
+        // Saved device first; built-in only if it is missing or unplugged.
+        let target: AudioDevice?
+        if let uid = savedUID, let saved = Audio.device(uid: uid),
+           saved.supports(scope), !isArctis(saved) {
+            target = saved
+        } else {
+            target = Audio.builtIn(for: scope)
+            if savedUID != nil && target != nil {
+                log("headset off: saved \(scope.label) device unavailable, using built-in")
             }
-            if Audio.setDefault(scope, to: device) {
-                log("headset off: \(scope.label) -> \(device.name)")
-            } else {
-                log("headset off: FAILED to set \(scope.label) -> \(device.name)")
-            }
+        }
+
+        guard let device = target else {
+            log("headset off: no \(scope.label) device available")
+            return
+        }
+        if Audio.setDefault(scope, to: device) {
+            log("headset off: \(scope.label) -> \(device.name)")
+        } else {
+            log("headset off: FAILED to set \(scope.label) -> \(device.name)")
         }
     }
 

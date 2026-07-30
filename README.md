@@ -43,16 +43,24 @@ one, so there is **no Input Monitoring prompt** and no kernel extension.
 Always fetches the latest version — nothing to substitute:
 
 ```sh
+mkdir -p ~/.local/share && cd ~/.local/share
 curl -LO https://github.com/iankamin/arctis-audioswitch/releases/latest/download/arctis-audioswitch-macos-arm64.tar.gz
 tar -xzf arctis-audioswitch-macos-arm64.tar.gz
+rm arctis-audioswitch-macos-arm64.tar.gz
 cd arctis-audioswitch
 ./bin/arctis install    # symlink `arctis` into ~/.local/bin
 arctis enable           # start now, and at every login
 ```
 
-`install` symlinks into `~/.local/bin`, so **keep the extracted folder** —
-deleting it breaks the command. Move it somewhere permanent first if you
-downloaded to `~/Downloads`, then re-run `./bin/arctis install`.
+> **Do not install into `~/Downloads`, `~/Desktop` or `~/Documents`.**
+> Those are TCC-protected. The LaunchAgent runs the binary from wherever you
+> put it, so installing there makes macOS raise a "wants to access files in
+> your Downloads folder" prompt at login — and if it is ever denied, the
+> daemon silently fails to start. `~/.local/share` is not protected.
+
+`install` creates a symlink, it does not copy, so **keep the extracted
+folder**. Deleting or moving it breaks the `arctis` command; if you do move
+it, re-run `./bin/arctis install` from the new location.
 
 To pin a specific version instead, every release also ships a versioned copy
 of the same tarball, e.g.

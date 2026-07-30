@@ -121,7 +121,9 @@ switcher.startObserving()
 // starting state explicitly rather than assuming it is off.
 if let initial = monitor.queryInitialState() {
     log("initial headset state: \(initial.rawValue)")
-    switcher.apply(initial)
+    // Deliberately not `apply` - at startup an already-off headset means the
+    // current devices are the user's own choice and must not be overridden.
+    switcher.applyInitial(initial)
 } else {
     log("could not determine initial headset state; waiting for the next event")
 }
