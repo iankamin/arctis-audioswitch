@@ -144,6 +144,29 @@ Logs go to `$TMPDIR/arctis-audioswitch/` — the per-user temp directory, privat
 to your account — so the OS clears them and they never accumulate across
 reboots. Read them with `arctis logs`.
 
+## Notifications
+
+A banner appears when devices switch, showing what they switched to. One
+banner per headset toggle, not one per device.
+
+```sh
+arctis notify          # show current setting
+arctis notify off      # disable
+arctis notify on       # enable
+```
+
+The setting is written into the LaunchAgent plist as an explicit `--notify` or
+`--no-notify` argument, so it survives `start`, `stop` and `enable`, and does
+not silently change if the built-in default ever does.
+
+> Banners are posted with `osascript`, so macOS attributes them to
+> **Script Editor** rather than to this tool, and they are suppressed if
+> notifications are disabled for Script Editor in System Settings.
+>
+> This is a limitation of shipping a plain binary: `UNUserNotificationCenter`
+> requires a bundle identifier and traps when called from a bare executable.
+> Attributing them correctly would mean shipping an `.app` wrapper.
+
 ## Protocol
 
 Reverse-engineered from scratch; see [`captures/protocol.md`](captures/protocol.md)

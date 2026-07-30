@@ -10,7 +10,7 @@ import Foundation
 
 setvbuf(stdout, nil, _IONBF, 0)
 
-let version = "1.0.3"
+let version = "1.1.0"
 
 // ---------------------------------------------------------------- paths
 
@@ -27,6 +27,10 @@ var command = "run"
 for arg in CommandLine.arguments.dropFirst() {
     switch arg {
     case "-v", "--verbose": verbose = true
+    // Both spellings exist so the LaunchAgent plist can state its intent
+    // explicitly rather than depending on whatever the built-in default is.
+    case "--notify": Notifier.enabled = true
+    case "--no-notify": Notifier.enabled = false
     case "--list": command = "list"
     case "--status": command = "status"
     case "--version": command = "version"
@@ -60,6 +64,8 @@ case "help":
 
       (no args)     run in the foreground, watching for headset power events
       -v, --verbose extra logging
+      --notify      show a notification banner when devices switch (default)
+      --no-notify   do not show a banner
       --status      show current and remembered devices, then exit
       --list        list all CoreAudio devices, then exit
       --version     print version

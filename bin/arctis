@@ -96,14 +96,31 @@ plist_binary() {
   /usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" 2>/dev/null
 }
 
+# Notification banners are on unless the plist explicitly says otherwise.
+# Reading the setting back out of the plist keeps it sticky across
+# start/stop/enable without a second config file to keep in sync.
+notify_enabled() {
+  [ -f "$PLIST" ] || return 0
+  ! /usr/libexec/PlistBuddy -c "Print :ProgramArguments" "$PLIST" 2>/dev/null \
+    | grep -q -- '--no-notify'
+}
+
 need_binary() {
   [ -x "$BIN" ] || die "daemon not built - run: $0 build"
 }
 
-# Writes the plist with RunAtLoad set to $1 (true|false).
+# Writes the plist with RunAtLoad set to $1 (true|false) and the notification
+# flag set to $2 (on|off).
 write_plist() {
   local run_at_load="$1"
+  local notify="${2:-on}"
   need_binary
+
+  # Always write the flag explicitly so the plist records intent, rather than
+  # inheriting whatever the binary's compiled-in default happens to be.
+  local notify_flag="--notify"
+  [ "$notify" = "off" ] && notify_flag="--no-notify"
+
   mkdir -p "$(dirname "$PLIST")" "$LOG_DIR"
   cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -115,6 +132,7 @@ write_plist() {
     <key>ProgramArguments</key>
     <array>
         <string>${BIN}</string>
+        <string>${notify_flag}</string>
     </array>
     <key>RunAtLoad</key>
     <${run_at_load}/>
@@ -166,7 +184,10 @@ cmd_start() {
   fi
   # Preserve the current login setting; starting now should not silently
   # enable or disable start-at-login.
-  if runs_at_login; then write_plist true; else write_plist false; fi
+  # Preserve both existing settings; starting now should change neither
+  # start-at-login nor the notification preference.
+  local notify="off"; notify_enabled && notify="on"
+  if runs_at_login; then write_plist true "$notify"; else write_plist false "$notify"; fi
   reload_job
   launchctl kickstart "$TARGET" >/dev/null 2>&1
   sleep 0.5
@@ -209,7 +230,8 @@ cmd_stop() {
 
 cmd_enable() {
   need_binary
-  write_plist true
+  local notify="off"; notify_enabled && notify="on"
+  write_plist true "$notify"
   reload_job
   launchctl kickstart "$TARGET" >/dev/null 2>&1
   sleep 0.5
@@ -256,6 +278,12 @@ cmd_status() {
     echo "  at login:    disabled"
   fi
 
+  if notify_enabled; then
+    echo "  banners:     on"
+  else
+    echo "  banners:     off"
+  fi
+
   # A plist pointing at a moved or deleted build is the most likely way this
   # setup silently breaks, so check for it explicitly.
   if [ -f "$PLIST" ]; then
@@ -280,6 +308,32 @@ cmd_status() {
   for f in "$PLIST" "$STATE_DIR/state.json" "$LOG_DIR/audioswitch.log"; do
     if [ -e "$f" ]; then echo "  ${dim}present${reset}  $f"; else echo "  ${dim}absent ${reset}  $f"; fi
   done
+}
+
+cmd_notify() {
+  local want="${1:-}"
+  case "$want" in
+    on|off) ;;
+    ""|status)
+      if notify_enabled; then echo "notifications: on"; else echo "notifications: off"; fi
+      return 0
+      ;;
+    *) die "usage: $(basename "$0") notify [on|off]" ;;
+  esac
+
+  if [ ! -f "$PLIST" ]; then
+    die "not installed as a LaunchAgent - run '$(basename "$0") enable' first"
+  fi
+
+  local run_at_load="false"; runs_at_login && run_at_load="true"
+  write_plist "$run_at_load" "$want"
+
+  # Only restart if it was actually running; the flag is read at startup.
+  if is_loaded; then
+    reload_job
+    launchctl kickstart "$TARGET" >/dev/null 2>&1
+  fi
+  echo "notifications: $want"
 }
 
 cmd_logs() {
@@ -312,6 +366,7 @@ ${bold}COMMANDS${reset}
   disable        do not start at login, and stop now
 
   status         show whether it is running, enabled, and current audio state
+  notify [on|off] show or set notification banners on device switches
   logs [-f]      show recent log output, -f to follow
   build          rebuild from source (source checkouts only)
 
@@ -399,6 +454,7 @@ case "${1:-help}" in
   enable)    cmd_enable ;;
   disable)   cmd_disable ;;
   status)    cmd_status ;;
+  notify)    shift; cmd_notify "${1:-}" ;;
   logs)      shift; cmd_logs "${1:-}" ;;
   build)     cmd_build ;;
   install)   cmd_install ;;

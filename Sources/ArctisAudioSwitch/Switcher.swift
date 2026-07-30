@@ -116,13 +116,23 @@ final class Switcher {
     // MARK: - switching
 
     func apply(_ headset: HeadsetState) {
+        let changed: [String]
         switch headset {
-        case .connected: switchToArctis()
-        case .disconnected: restoreFallback()
+        case .connected: changed = switchToArctis()
+        case .disconnected: changed = restoreFallback()
         }
+
+        // One banner per transition rather than one per scope: output and
+        // input almost always move together, and two stacked banners for a
+        // single headset toggle is noise.
+        guard !changed.isEmpty else { return }
+        Notifier.post(
+            title: headset == .connected ? "Headset connected" : "Headset disconnected",
+            body: changed.joined(separator: "\n"))
     }
 
-    private func switchToArctis() {
+    @discardableResult
+    private func switchToArctis() -> [String] {
         // Capture where we are now - this is the most reliable moment to learn
         // what the user was using before the headset came up.
         for scope in [Scope.output, Scope.input] {
@@ -136,6 +146,7 @@ final class Switcher {
         save()
 
         suppressObservationUntil = Date().addingTimeInterval(2.0)
+        var changed: [String] = []
         for scope in [Scope.output, Scope.input] {
             guard let arctis = arctisDevice(for: scope) else {
                 log("headset on: no Arctis \(scope.label) device found")
@@ -143,10 +154,12 @@ final class Switcher {
             }
             if Audio.setDefault(scope, to: arctis) {
                 log("headset on: \(scope.label) -> \(arctis.name)")
+                changed.append("\(scope.label.capitalized): \(arctis.name)")
             } else {
                 log("headset on: FAILED to set \(scope.label) -> \(arctis.name)")
             }
         }
+        return changed
     }
 
     /// Startup is not the same as a live disconnect.
@@ -184,14 +197,16 @@ final class Switcher {
         }
     }
 
-    private func restoreFallback() {
+    @discardableResult
+    private func restoreFallback() -> [String] {
         suppressObservationUntil = Date().addingTimeInterval(2.0)
-        for scope in [Scope.output, Scope.input] {
-            restoreFallback(for: scope)
-        }
+        return [Scope.output, Scope.input].compactMap { restoreFallback(for: $0) }
     }
 
-    private func restoreFallback(for scope: Scope) {
+    /// Returns a human-readable description of the change, or nil if nothing
+    /// was switched.
+    @discardableResult
+    private func restoreFallback(for scope: Scope) -> String? {
         suppressObservationUntil = Date().addingTimeInterval(2.0)
 
         let savedUID = scope == .output ? state.lastOutputUID : state.lastInputUID
@@ -219,7 +234,7 @@ final class Switcher {
             // Leaving the current device alone is strictly better than
             // selecting the headset.
             log("headset off: no non-headset \(scope.label) device available, leaving as-is")
-            return
+            return nil
         }
 
         if let uid = savedUID, device.uid != uid {
@@ -228,8 +243,10 @@ final class Switcher {
 
         if Audio.setDefault(scope, to: device) {
             log("headset off: \(scope.label) -> \(device.name)")
+            return "\(scope.label.capitalized): \(device.name)"
         } else {
             log("headset off: FAILED to set \(scope.label) -> \(device.name)")
+            return nil
         }
     }
 
