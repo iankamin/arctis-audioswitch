@@ -313,9 +313,9 @@ ${bold}COMMANDS${reset}
 
   status         show whether it is running, enabled, and current audio state
   logs [-f]      show recent log output, -f to follow
-  build          compile the daemon from Sources/
+  build          rebuild from source (source checkouts only)
 
-  install        symlink 'arctis' into $PREFIX so it works from anywhere
+  install        symlink 'arctis' into ~/.local/bin so it works from anywhere
   uninstall-cli  remove just that symlink
   uninstall      remove everything: agent, symlink, state, logs
 
@@ -325,13 +325,19 @@ ${bold}NOTES${reset}
   start/stop control it right now.
   enable/disable control whether it comes back at login.
 
-  'install' symlinks rather than copies, so the link follows this checkout.
+  'install' symlinks rather than copies, so keep this folder where it is.
   Override the location with ARCTIS_PREFIX, e.g.
     ARCTIS_PREFIX=/usr/local/bin arctis install
 
-  The LaunchAgent points at the binary inside this project directory, so
-  moving the project breaks it - re-run 'arctis enable' afterwards.
+  The LaunchAgent runs the binary from this folder, so moving or deleting it
+  breaks the daemon - re-run 'arctis enable' from the new location.
   'arctis status' warns when that has happened.
+
+  Do not keep this folder in ~/Downloads, ~/Desktop or ~/Documents: those are
+  TCC-protected, so macOS will prompt at login and the daemon fails to start
+  if denied. ~/.local/share is a good place.
+
+  'build' needs a source checkout; the release tarball ships a prebuilt binary.
 
   Everything created outside this folder is listed in RESOURCES.md.
 EOF
