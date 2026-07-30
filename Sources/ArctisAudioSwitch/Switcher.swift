@@ -16,8 +16,14 @@ struct SavedState: Codable {
 
 final class Switcher {
 
-    /// Matched against both device name and UID.
-    private static let arctisMarker = "arctis nova pro"
+    /// The specific headset this daemon manages. Used to decide what to switch
+    /// TO when it powers on, so it is deliberately precise.
+    private static let targetMarker = "arctis nova pro"
+
+    /// Broader marker used only to decide what must never be chosen while the
+    /// headset is off. Any Arctis is excluded, so a second Arctis on the
+    /// system can never silently become the "off" device either.
+    private static let neverFallbackMarker = "arctis"
 
     private let stateURL: URL
     private var state: SavedState
@@ -57,14 +63,25 @@ final class Switcher {
 
     // MARK: - identification
 
-    private func isArctis(_ device: AudioDevice) -> Bool {
-        let marker = Switcher.arctisMarker
-        return device.name.lowercased().contains(marker)
+    private func matches(_ device: AudioDevice, _ marker: String) -> Bool {
+        device.name.lowercased().contains(marker)
             || device.uid.lowercased().contains(marker)
     }
 
+    /// Is this the headset we manage? Used when switching TO it.
+    private func isTargetHeadset(_ device: AudioDevice) -> Bool {
+        matches(device, Switcher.targetMarker)
+    }
+
+    /// Is this a device that must never be selected while the headset is off,
+    /// or recorded as somewhere to fall back to? Broader than
+    /// `isTargetHeadset` on purpose - see `neverFallbackMarker`.
+    private func isNeverFallback(_ device: AudioDevice) -> Bool {
+        matches(device, Switcher.neverFallbackMarker)
+    }
+
     private func arctisDevice(for scope: Scope) -> AudioDevice? {
-        Audio.devices().first { isArctis($0) && $0.supports(scope) }
+        Audio.devices().first { isTargetHeadset($0) && $0.supports(scope) }
     }
 
     // MARK: - observation
@@ -81,7 +98,8 @@ final class Switcher {
 
     private func noteDefaultChanged(_ scope: Scope) {
         guard Date() >= suppressObservationUntil else { return }
-        guard let current = Audio.currentDefault(scope), !isArctis(current) else { return }
+        // Never record a headset as somewhere to fall back to.
+        guard let current = Audio.currentDefault(scope), !isNeverFallback(current) else { return }
 
         switch scope {
         case .output:
@@ -108,7 +126,7 @@ final class Switcher {
         // Capture where we are now - this is the most reliable moment to learn
         // what the user was using before the headset came up.
         for scope in [Scope.output, Scope.input] {
-            if let current = Audio.currentDefault(scope), !isArctis(current) {
+            if let current = Audio.currentDefault(scope), !isNeverFallback(current) {
                 switch scope {
                 case .output: state.lastOutputUID = current.uid
                 case .input: state.lastInputUID = current.uid
@@ -148,7 +166,8 @@ final class Switcher {
         var untouched: [String] = []
         for scope in [Scope.output, Scope.input] {
             guard let current = Audio.currentDefault(scope) else { continue }
-            if isArctis(current) {
+            // Stale only if it is still pointing at the headset we manage.
+            if isTargetHeadset(current) {
                 restoreFallback(for: scope)
             } else {
                 // Adopt what is already in use as the fallback baseline.
@@ -177,22 +196,36 @@ final class Switcher {
 
         let savedUID = scope == .output ? state.lastOutputUID : state.lastInputUID
 
-        // Saved device first; built-in only if it is missing or unplugged.
-        let target: AudioDevice?
-        if let uid = savedUID, let saved = Audio.device(uid: uid),
-           saved.supports(scope), !isArctis(saved) {
-            target = saved
-        } else {
-            target = Audio.builtIn(for: scope)
-            if savedUID != nil && target != nil {
-                log("headset off: saved \(scope.label) device unavailable, using built-in")
-            }
+        // Candidates in priority order:
+        //   1. the remembered device
+        //   2. the built-in speaker / microphone
+        //   3. any other usable device
+        var candidates: [AudioDevice] = []
+        if let uid = savedUID, let saved = Audio.device(uid: uid) {
+            candidates.append(saved)
         }
+        if let builtIn = Audio.builtIn(for: scope) {
+            candidates.append(builtIn)
+        }
+        candidates.append(contentsOf: Audio.devices())
 
-        guard let device = target else {
-            log("headset off: no \(scope.label) device available")
+        // THE invariant for the off state: never select the headset itself.
+        // Routing to a powered-off headset produces silence with no visible
+        // cause, so filter it out of every candidate at one choke point
+        // rather than guarding each branch separately.
+        let usable = candidates.filter { $0.supports(scope) && !isNeverFallback($0) }
+
+        guard let device = usable.first else {
+            // Leaving the current device alone is strictly better than
+            // selecting the headset.
+            log("headset off: no non-headset \(scope.label) device available, leaving as-is")
             return
         }
+
+        if let uid = savedUID, device.uid != uid {
+            log("headset off: saved \(scope.label) device unavailable, using \(device.name)")
+        }
+
         if Audio.setDefault(scope, to: device) {
             log("headset off: \(scope.label) -> \(device.name)")
         } else {

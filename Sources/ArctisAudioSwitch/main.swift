@@ -10,7 +10,7 @@ import Foundation
 
 setvbuf(stdout, nil, _IONBF, 0)
 
-let version = "1.0.0"
+let version = "1.0.1"
 
 // ---------------------------------------------------------------- paths
 
