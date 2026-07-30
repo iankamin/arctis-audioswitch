@@ -1,0 +1,26 @@
+# Build output
+build/
+.build/
+*.o
+*.dSYM/
+
+# Release artifacts
+dist/
+*.tar.gz
+
+# Xcode / SwiftPM
+.swiftpm/
+Package.resolved
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+
+# Ad-hoc capture logs. The curated captures under captures/ that document the
+# protocol ARE tracked - see captures/protocol.md - but scratch runs are not.
+captures/scratch-*.log
+captures/smoke.log
+
+# Claude Code local settings
+.claude/

@@ -1,0 +1,325 @@
+probe: Arctis Nova Pro Wireless vendor interface
+  1038:12e0  usagePage 0xffc0  maxInputReport 64
+  passive listen only
+
+Toggle the headset ON and OFF. Watch for bytes marked ^
+Ctrl-C to stop.
+----------------------------------------------------------------
+[14:51:25.563] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 0a 00 00 0a 05 00 04 01
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:51:40.370] ... alive, no change for 14s
+[14:51:55.367] ... alive, no change for 29s
+[14:52:02.379] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 08
+            0  1  2  3  4
+
+[14:52:02.475] IN  id=7 len=64  *** CHANGED ***
+           07 b7 08 08 08
+               ^  ^  ^   
+            0  1  2  3  4
+
+[14:52:02.571] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 0a 00 00 0a 05 00 08 08
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:52:10.372] ... alive, no change for 7s
+[14:52:25.367] ... alive, no change for 22s
+[14:52:25.548] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 04
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:52:25.564] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 0a 00 00 0a 05 00 04 01
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:52:25.644] IN  id=7 len=64  *** CHANGED ***
+           07 b7 00 08 01
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:52:40.372] ... alive, no change for 14s
+[14:52:55.372] ... alive, no change for 29s
+[14:53:10.372] ... alive, no change for 44s
+[14:53:25.367] ... alive, no change for 59s
+[14:53:40.371] ... alive, no change for 74s
+[14:53:55.371] ... alive, no change for 89s
+[14:54:10.370] ... alive, no change for 104s
+[14:54:20.172] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 08
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:54:20.252] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 0a 00 00 0a 05 00 08 08
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:54:20.284] IN  id=7 len=64  *** CHANGED ***
+           07 b7 08 08 08
+               ^  ^  ^   
+            0  1  2  3  4
+
+[14:54:25.371] ... alive, no change for 5s
+[14:54:40.253] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 09 00 01 0a 05 00 08 08
+                                    ^     ^               
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:54:40.268] IN  id=7 len=64  *** CHANGED ***
+           07 b9 09
+               ^  ^
+            0  1  2
+
+[14:54:40.370] ... alive, no change for 0s
+[14:54:40.381] IN  id=7 len=64  *** CHANGED ***
+           07 b9 08
+                  ^
+            0  1  2
+
+[14:54:40.572] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 08 00 01 0a 05 00 08 08
+                                    ^                     
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:54:40.749] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 07 00 01 0a 05 00 08 08
+                                    ^                     
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:54:40.797] IN  id=7 len=64  *** CHANGED ***
+           07 b9 07
+                  ^
+            0  1  2
+
+[14:54:40.908] IN  id=7 len=64  *** CHANGED ***
+           07 b9 06
+                  ^
+            0  1  2
+
+[14:54:41.260] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 06 00 01 0a 05 00 08 08
+                                    ^                     
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:54:42.908] IN  id=7 len=64  *** CHANGED ***
+           07 bd
+               ^
+            0  1
+
+[14:54:43.260] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 06 00 00 0a 05 00 08 08
+                                          ^               
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:54:55.372] ... alive, no change for 12s
+[14:55:10.368] ... alive, no change for 27s
+[14:55:23.181] IN  id=7 len=64  *** CHANGED ***
+           07 bd 02
+                  ^
+            0  1  2
+
+[14:55:23.261] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 06 00 02 0a 05 00 08 08
+                                          ^               
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:55:25.368] ... alive, no change for 2s
+[14:55:40.371] ... alive, no change for 17s
+[14:55:55.053] IN  id=7 len=64  *** CHANGED ***
+           07 2e 05
+               ^  ^
+            0  1  2
+
+[14:55:55.372] ... alive, no change for 0s
+[14:55:55.677] IN  id=7 len=64  *** CHANGED ***
+           07 2e 06
+                  ^
+            0  1  2
+
+[14:55:55.789] IN  id=7 len=64  *** CHANGED ***
+           07 2e 07
+                  ^
+            0  1  2
+
+[14:56:00.765] IN  id=7 len=64  *** CHANGED ***
+           07 2e 06
+                  ^
+            0  1  2
+
+[14:56:00.877] IN  id=7 len=64  *** CHANGED ***
+           07 2e 05
+                  ^
+            0  1  2
+
+[14:56:02.349] IN  id=7 len=64  *** CHANGED ***
+           07 2e 06
+                  ^
+            0  1  2
+
+[14:56:02.861] IN  id=7 len=64  *** CHANGED ***
+           07 2e 07
+                  ^
+            0  1  2
+
+[14:56:02.973] IN  id=7 len=64  *** CHANGED ***
+           07 2e 08
+                  ^
+            0  1  2
+
+[14:56:03.821] IN  id=7 len=64  *** CHANGED ***
+           07 2e 07
+                  ^
+            0  1  2
+
+[14:56:04.237] IN  id=7 len=64  *** CHANGED ***
+           07 2e 08
+                  ^
+            0  1  2
+
+[14:56:04.349] IN  id=7 len=64  *** CHANGED ***
+           07 2e 09
+                  ^
+            0  1  2
+
+[14:56:04.461] IN  id=7 len=64  *** CHANGED ***
+           07 2e 0a
+                  ^
+            0  1  2
+
+[14:56:04.573] IN  id=7 len=64  *** CHANGED ***
+           07 2e 0b
+                  ^
+            0  1  2
+
+[14:56:05.293] IN  id=7 len=64  *** CHANGED ***
+           07 2e 0c
+                  ^
+            0  1  2
+
+[14:56:10.371] ... alive, no change for 5s
+[14:56:12.429] IN  id=7 len=64  *** CHANGED ***
+           07 2e 04
+                  ^
+            0  1  2
+
+[14:56:25.369] ... alive, no change for 12s
+[14:56:40.373] ... alive, no change for 27s
+[14:56:55.369] ... alive, no change for 42s
+[14:57:10.372] ... alive, no change for 57s
+[14:57:25.368] ... alive, no change for 72s
+[14:57:40.371] ... alive, no change for 87s
+[14:57:55.368] ... alive, no change for 102s
+[14:58:10.372] ... alive, no change for 117s
+[14:58:25.373] ... alive, no change for 132s
+[14:58:40.369] ... alive, no change for 147s
+[14:58:55.373] ... alive, no change for 162s
+[14:59:10.373] ... alive, no change for 177s
+[14:59:25.371] ... alive, no change for 192s
+[14:59:40.370] ... alive, no change for 207s
+[14:59:55.375] ... alive, no change for 222s
+[15:00:10.370] ... alive, no change for 237s
+[15:00:25.373] ... alive, no change for 252s
+[15:00:40.374] ... alive, no change for 267s
+[15:00:55.373] ... alive, no change for 282s
+[15:01:10.373] ... alive, no change for 297s
+[15:01:25.373] ... alive, no change for 312s
+[15:01:40.370] ... alive, no change for 327s
+[15:01:55.374] ... alive, no change for 342s
+[15:02:10.374] ... alive, no change for 357s
+[15:02:25.373] ... alive, no change for 372s
+[15:02:40.370] ... alive, no change for 387s
+[15:02:55.374] ... alive, no change for 402s
+[15:03:10.370] ... alive, no change for 417s
+[15:03:25.370] ... alive, no change for 432s
+[15:03:25.697] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 04
+               ^     ^  ^
+            0  1  2  3  4
+
+[15:03:25.760] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 06 00 02 0a 05 00 04 01
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[15:03:25.792] IN  id=7 len=64  *** CHANGED ***
+           07 b7 00 08 01
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[15:03:40.374] ... alive, no change for 14s
+[15:03:55.373] ... alive, no change for 29s
+[15:04:03.697] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 08
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[15:04:03.745] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 06 00 02 0a 05 00 08 08
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[15:04:03.809] IN  id=7 len=64  *** CHANGED ***
+           07 b7 08 08 08
+               ^  ^  ^   
+            0  1  2  3  4
+
+[15:04:10.374] ... alive, no change for 6s
+[15:04:25.371] ... alive, no change for 21s
+[15:04:29.713] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 04
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[15:04:29.745] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 06 00 02 0a 05 00 04 01
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[15:04:29.825] IN  id=7 len=64  *** CHANGED ***
+           07 b7 00 08 01
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[15:04:40.374] ... alive, no change for 10s
+[15:04:55.372] ... alive, no change for 25s
+[15:05:10.373] ... alive, no change for 40s
+[15:05:25.373] ... alive, no change for 55s
+[15:05:40.374] ... alive, no change for 70s
+[15:05:55.375] ... alive, no change for 85s
+[15:06:10.375] ... alive, no change for 100s
+[15:06:25.373] ... alive, no change for 115s
+[15:06:40.374] ... alive, no change for 130s
+[15:06:55.375] ... alive, no change for 145s
+[15:07:10.374] ... alive, no change for 160s
+[15:07:25.372] ... alive, no change for 175s
+[15:07:40.374] ... alive, no change for 190s
+[15:07:55.373] ... alive, no change for 205s
+[15:08:10.373] ... alive, no change for 220s
+[15:08:25.372] ... alive, no change for 235s
+[15:08:40.373] ... alive, no change for 250s
+[15:08:55.375] ... alive, no change for 265s
+[15:09:10.373] ... alive, no change for 280s
+[15:09:25.375] ... alive, no change for 295s
+[15:09:40.372] ... alive, no change for 310s
+[15:09:55.376] ... alive, no change for 325s
+[15:10:10.375] ... alive, no change for 340s
+[15:10:25.374] ... alive, no change for 355s
+[15:10:40.374] ... alive, no change for 370s
+[15:10:55.376] ... alive, no change for 385s
+[15:11:10.375] ... alive, no change for 400s
+[15:11:25.372] ... alive, no change for 415s
+[15:11:40.373] ... alive, no change for 430s
+[15:11:55.376] ... alive, no change for 445s
+[15:12:10.372] ... alive, no change for 460s
+[15:12:25.373] ... alive, no change for 475s
+[15:12:40.373] ... alive, no change for 490s
+[15:12:55.376] ... alive, no change for 505s
+[15:13:10.373] ... alive, no change for 520s
+[15:13:25.372] ... alive, no change for 535s
+[15:13:40.374] ... alive, no change for 550s
+[15:13:55.372] ... alive, no change for 565s

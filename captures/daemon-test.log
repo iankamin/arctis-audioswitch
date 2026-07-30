@@ -1,0 +1,15 @@
+[2026-07-30 15:03:06] arctis-audioswitch 1.0.0 starting
+[2026-07-30 15:03:06] watching base station 1038:12e0 usagePage 0xffc0
+[2026-07-30 15:03:06] initial headset state: connected
+[2026-07-30 15:03:06] headset on: output -> Arctis Nova Pro Wireless
+[2026-07-30 15:03:06] headset on: input -> Arctis Nova Pro Wireless
+[2026-07-30 15:03:06] watching for headset power events
+[2026-07-30 15:03:25] event: headset disconnected
+[2026-07-30 15:03:25] headset off: output -> X34 V
+[2026-07-30 15:03:25] headset off: input -> MacBook Pro Microphone
+[2026-07-30 15:04:03] event: headset connected
+[2026-07-30 15:04:03] headset on: output -> Arctis Nova Pro Wireless
+[2026-07-30 15:04:03] headset on: input -> Arctis Nova Pro Wireless
+[2026-07-30 15:04:29] event: headset disconnected
+[2026-07-30 15:04:29] headset off: output -> X34 V
+[2026-07-30 15:04:29] headset off: input -> MacBook Pro Microphone

@@ -1,0 +1,403 @@
+#!/bin/bash
+# arctis - manage the Arctis Nova Pro Wireless audio-switching daemon.
+#
+#   start / stop      run it now (does not change login behaviour)
+#   enable / disable  start at login (or not)
+#
+# Every resource this touches is listed in RESOURCES.md and removed by
+# teardown.sh.
+
+set -uo pipefail
+
+LABEL="io.github.iankamin.arctis-audioswitch"
+UID_NUM="$(id -u)"
+TARGET="gui/${UID_NUM}/${LABEL}"
+PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
+STATE_DIR="$HOME/Library/Application Support/ArctisNovaPro"
+
+# Logs are throwaway diagnostics, so they live in the per-user temp directory
+# and are cleared by the OS - nothing accumulates across reboots. $TMPDIR is
+# private to this user (0700), unlike world-readable /tmp, and the log records
+# your audio device names.
+#
+# launchd does NOT expand environment variables in plist paths, so this is
+# resolved here and the absolute path is baked into the plist at write time.
+LOG_DIR="${TMPDIR:-/tmp}"
+LOG_DIR="${LOG_DIR%/}/arctis-audioswitch"
+
+# Resolve through symlinks: `arctis install` puts a link in ~/.local/bin, and
+# dirname on that link would point at ~/.local instead of the real checkout.
+# `readlink -f` is not portable to older macOS, so walk the chain by hand.
+resolve_dir() {
+  local src="$1" dir
+  while [ -L "$src" ]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    case "$src" in
+      /*) ;;
+      *) src="$dir/$src" ;;
+    esac
+  done
+  (cd -P "$(dirname "$src")" && pwd)
+}
+
+BIN_DIR="$(resolve_dir "${BASH_SOURCE[0]}")"
+PROJECT_DIR="$(cd "$BIN_DIR/.." && pwd)"
+SELF="$PROJECT_DIR/bin/arctis"
+
+# Prefer the SwiftPM build; fall back to a plain swiftc build in build/ so an
+# existing checkout keeps working.
+if [ -x "$PROJECT_DIR/.build/release/arctis-audioswitch" ]; then
+  BIN="$PROJECT_DIR/.build/release/arctis-audioswitch"
+else
+  BIN="$PROJECT_DIR/build/arctis-audioswitch"
+fi
+
+# Where `install` puts the CLI. Override with ARCTIS_PREFIX.
+PREFIX="${ARCTIS_PREFIX:-$HOME/.local/bin}"
+CLI_LINK="$PREFIX/arctis"
+
+bold=$(tput bold 2>/dev/null || echo "")
+dim=$(tput dim 2>/dev/null || echo "")
+reset=$(tput sgr0 2>/dev/null || echo "")
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# --------------------------------------------------------------- helpers
+
+is_loaded() {
+  launchctl print "$TARGET" >/dev/null 2>&1
+}
+
+job_pid() {
+  launchctl print "$TARGET" 2>/dev/null \
+    | awk '/^[[:space:]]*pid = /{print $3; exit}'
+}
+
+# The daemon can also be running without launchd - started by hand during
+# development, or left over from a previous session. Reporting only the
+# launchd job would call that "not running" while it is actively switching
+# audio devices.
+#
+# Match the process NAME, not the command line: -f "$BIN" misses an instance
+# started via a relative path, and would also match the shell wrapper whose
+# command line merely mentions the binary.
+stray_pids() {
+  pgrep -x "$(basename "$BIN")" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'
+}
+
+runs_at_login() {
+  [ -f "$PLIST" ] || return 1
+  /usr/libexec/PlistBuddy -c "Print :RunAtLoad" "$PLIST" 2>/dev/null | grep -q true
+}
+
+plist_binary() {
+  [ -f "$PLIST" ] || return 1
+  /usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" 2>/dev/null
+}
+
+need_binary() {
+  [ -x "$BIN" ] || die "daemon not built - run: $0 build"
+}
+
+# Writes the plist with RunAtLoad set to $1 (true|false).
+write_plist() {
+  local run_at_load="$1"
+  need_binary
+  mkdir -p "$(dirname "$PLIST")" "$LOG_DIR"
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${BIN}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <${run_at_load}/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/audioswitch.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/audioswitch.err.log</string>
+</dict>
+</plist>
+EOF
+}
+
+reload_job() {
+  launchctl bootout "$TARGET" >/dev/null 2>&1
+  launchctl bootstrap "gui/${UID_NUM}" "$PLIST" 2>/dev/null
+}
+
+# --------------------------------------------------------------- commands
+
+cmd_build() {
+  echo "building..."
+  ( cd "$PROJECT_DIR" && swift build -c release ) || die "build failed"
+  BIN="$PROJECT_DIR/.build/release/arctis-audioswitch"
+  [ -x "$BIN" ] || die "build reported success but $BIN is missing"
+  echo "built $BIN"
+}
+
+cmd_start() {
+  need_binary
+  if is_loaded && [ -n "$(job_pid)" ]; then
+    echo "already running (pid $(job_pid))"
+    return 0
+  fi
+  # Two daemons would fight over the default device on every event.
+  local stray; stray="$(stray_pids)"
+  if [ -n "$stray" ]; then
+    echo "a directly-started daemon is already running (pid $stray)"
+    echo "stopping it first so they do not both react to the same event"
+    # shellcheck disable=SC2086
+    kill $stray 2>/dev/null
+    sleep 0.3
+  fi
+  # Preserve the current login setting; starting now should not silently
+  # enable or disable start-at-login.
+  if runs_at_login; then write_plist true; else write_plist false; fi
+  reload_job
+  launchctl kickstart "$TARGET" >/dev/null 2>&1
+  sleep 0.5
+  local pid; pid="$(job_pid)"
+  if [ -n "$pid" ]; then
+    echo "started (pid $pid)"
+  else
+    echo "started, but no pid reported - check: $0 logs"
+  fi
+}
+
+cmd_stop() {
+  local stopped=0
+
+  if is_loaded; then
+    launchctl bootout "$TARGET" >/dev/null 2>&1
+    echo "stopped launchd job"
+    stopped=1
+  fi
+
+  # Also clean up any directly-started instance, otherwise `stop` would claim
+  # success while one kept running and switching audio devices.
+  local stray; stray="$(stray_pids)"
+  if [ -n "$stray" ]; then
+    # shellcheck disable=SC2086
+    kill $stray 2>/dev/null
+    sleep 0.3
+    local remaining; remaining="$(stray_pids)"
+    if [ -n "$remaining" ]; then
+      # shellcheck disable=SC2086
+      kill -9 $remaining 2>/dev/null
+    fi
+    echo "stopped directly-started daemon (pid $stray)"
+    stopped=1
+  fi
+
+  [ "$stopped" = "0" ] && echo "not running"
+  return 0
+}
+
+cmd_enable() {
+  need_binary
+  write_plist true
+  reload_job
+  launchctl kickstart "$TARGET" >/dev/null 2>&1
+  sleep 0.5
+  echo "enabled - will start at login"
+  local pid; pid="$(job_pid)"
+  [ -n "$pid" ] && echo "started now (pid $pid)"
+  return 0
+}
+
+cmd_disable() {
+  if ! [ -f "$PLIST" ] && ! is_loaded; then
+    echo "already disabled"
+    return 0
+  fi
+  launchctl bootout "$TARGET" >/dev/null 2>&1
+  rm -f "$PLIST"
+  echo "disabled - will not start at login, and stopped now"
+}
+
+cmd_status() {
+  echo "${bold}daemon${reset}"
+  if [ -x "$BIN" ]; then
+    echo "  binary:      $BIN"
+  else
+    echo "  binary:      ${bold}not built${reset} (run: $0 build)"
+  fi
+
+  local pid; pid="$(job_pid)"
+  local stray; stray="$(stray_pids)"
+  if is_loaded && [ -n "$pid" ]; then
+    echo "  running:     yes, under launchd (pid $pid)"
+  elif [ -n "$stray" ]; then
+    echo "  running:     yes, ${bold}not under launchd${reset} (pid $stray)"
+    echo "               started directly, so it will not survive a reboot"
+  elif is_loaded; then
+    echo "  running:     no (job loaded but not started)"
+  else
+    echo "  running:     no"
+  fi
+
+  if runs_at_login; then
+    echo "  at login:    enabled"
+  else
+    echo "  at login:    disabled"
+  fi
+
+  # A plist pointing at a moved or deleted build is the most likely way this
+  # setup silently breaks, so check for it explicitly.
+  if [ -f "$PLIST" ]; then
+    local recorded; recorded="$(plist_binary)"
+    if [ "$recorded" != "$BIN" ]; then
+      echo "  ${bold}warning:${reset}   plist points at $recorded"
+      echo "               but this checkout builds to $BIN"
+      echo "               re-run: $0 enable"
+    fi
+  fi
+
+  echo
+  echo "${bold}audio${reset}"
+  if [ -x "$BIN" ]; then
+    "$BIN" --status 2>&1 | tail -n +2 | sed 's/^/  /'
+  else
+    echo "  (unavailable - daemon not built)"
+  fi
+
+  echo
+  echo "${bold}files${reset}"
+  for f in "$PLIST" "$STATE_DIR/state.json" "$LOG_DIR/audioswitch.log"; do
+    if [ -e "$f" ]; then echo "  ${dim}present${reset}  $f"; else echo "  ${dim}absent ${reset}  $f"; fi
+  done
+}
+
+cmd_logs() {
+  local logfile="$LOG_DIR/audioswitch.log"
+  [ -f "$logfile" ] || die "no log yet at $logfile"
+  if [ "${1:-}" = "-f" ]; then
+    tail -f "$logfile"
+  else
+    tail -n 50 "$logfile"
+  fi
+}
+
+cmd_help() {
+  cat <<EOF
+${bold}arctis${reset} - Arctis Nova Pro Wireless audio switcher
+
+Follows the headset: when it powers on, it becomes the default input and
+output; when it powers off, the previous device is restored (falling back to
+the built-in speakers and microphone).
+
+${bold}USAGE${reset}
+  arctis <command>
+
+${bold}COMMANDS${reset}
+  start          start the daemon now; leaves start-at-login unchanged
+  stop           stop the daemon now; leaves start-at-login unchanged
+  restart        stop then start
+
+  enable         start at login, and start now
+  disable        do not start at login, and stop now
+
+  status         show whether it is running, enabled, and current audio state
+  logs [-f]      show recent log output, -f to follow
+  build          compile the daemon from Sources/
+
+  install        symlink 'arctis' into $PREFIX so it works from anywhere
+  uninstall-cli  remove just that symlink
+  uninstall      remove everything: agent, symlink, state, logs
+
+  -h, --help     this text
+
+${bold}NOTES${reset}
+  start/stop control it right now.
+  enable/disable control whether it comes back at login.
+
+  'install' symlinks rather than copies, so the link follows this checkout.
+  Override the location with ARCTIS_PREFIX, e.g.
+    ARCTIS_PREFIX=/usr/local/bin arctis install
+
+  The LaunchAgent points at the binary inside this project directory, so
+  moving the project breaks it - re-run 'arctis enable' afterwards.
+  'arctis status' warns when that has happened.
+
+  Everything created outside this folder is listed in RESOURCES.md.
+EOF
+}
+
+# Symlink rather than copy: the link keeps pointing at this checkout, so
+# rebuilds and edits take effect without reinstalling.
+cmd_install() {
+  mkdir -p "$PREFIX" || die "could not create $PREFIX"
+
+  if [ -e "$CLI_LINK" ] || [ -L "$CLI_LINK" ]; then
+    local existing
+    existing="$(readlink "$CLI_LINK" 2>/dev/null || echo "$CLI_LINK")"
+    if [ "$existing" = "$SELF" ]; then
+      echo "already installed: $CLI_LINK"
+      return 0
+    fi
+    echo "replacing existing $CLI_LINK"
+    echo "  was: $existing"
+    rm -f "$CLI_LINK" || die "could not remove $CLI_LINK"
+  fi
+
+  ln -s "$SELF" "$CLI_LINK" || die "could not create symlink $CLI_LINK"
+  echo "installed: $CLI_LINK -> $SELF"
+
+  case ":$PATH:" in
+    *":$PREFIX:"*)
+      echo "'arctis' is now available globally"
+      ;;
+    *)
+      echo
+      echo "warning: $PREFIX is not on your PATH"
+      echo "  add this to your shell profile:"
+      echo "    export PATH=\"$PREFIX:\$PATH\""
+      ;;
+  esac
+}
+
+cmd_uninstall_cli() {
+  if [ -L "$CLI_LINK" ] || [ -e "$CLI_LINK" ]; then
+    rm -f "$CLI_LINK" && echo "removed $CLI_LINK"
+  else
+    echo "not installed: $CLI_LINK"
+  fi
+}
+
+cmd_uninstall() {
+  local teardown="$PROJECT_DIR/teardown.sh"
+  [ -x "$teardown" ] || die "teardown.sh not found or not executable at $teardown"
+  "$teardown" "$@"
+}
+
+# --------------------------------------------------------------- dispatch
+
+case "${1:-help}" in
+  start)     cmd_start ;;
+  stop)      cmd_stop ;;
+  restart)   cmd_stop; cmd_start ;;
+  enable)    cmd_enable ;;
+  disable)   cmd_disable ;;
+  status)    cmd_status ;;
+  logs)      shift; cmd_logs "${1:-}" ;;
+  build)     cmd_build ;;
+  install)   cmd_install ;;
+  uninstall-cli) cmd_uninstall_cli ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
+  -h|--help|help) cmd_help ;;
+  *) echo "unknown command: $1" >&2; echo; cmd_help; exit 2 ;;
+esac

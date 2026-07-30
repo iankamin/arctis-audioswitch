@@ -1,0 +1,103 @@
+probe: Arctis Nova Pro Wireless vendor interface
+  1038:12e0  usagePage 0xffc0  maxInputReport 64
+  polling [06 b0] every 1.0s
+
+Toggle the headset ON and OFF. Watch for bytes marked ^
+Ctrl-C to stop.
+----------------------------------------------------------------
+[14:45:38.235] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 0a 00 00 0a 05 00 04 01
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:45:53.229] ... alive, no change for 14s
+[14:46:08.237] ... alive, no change for 29s
+[14:46:23.229] ... alive, no change for 44s
+[14:46:38.221] ... alive, no change for 59s
+[14:46:53.229] ... alive, no change for 74s
+[14:46:59.691] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 08
+            ^  ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:46:59.739] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 0a 00 00 0a 05 00 08 08
+            ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:46:59.803] IN  id=7 len=64  *** CHANGED ***
+           07 b7 02 08 08
+            ^  ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:47:00.235] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 02 08 0a 00 00 0a 05 00 08 08
+            ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:47:08.236] ... alive, no change for 8s
+[14:47:23.229] ... alive, no change for 22s
+[14:47:38.230] ... alive, no change for 37s
+[14:47:42.277] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 0a 00 00 0a 05 00 04 01
+                              ^                       ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:47:42.325] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 04
+            ^  ^  ^  ^   
+            0  1  2  3  4
+
+[14:47:42.437] IN  id=7 len=64  *** CHANGED ***
+           07 b7 00 08 01
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:47:42.565] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 0a 00 00 0a 05 00 04 01
+            ^  ^     ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:47:53.241] ... alive, no change for 10s
+[14:48:08.250] ... alive, no change for 25s
+[14:48:23.243] ... alive, no change for 40s
+[14:48:38.251] ... alive, no change for 55s
+[14:48:53.244] ... alive, no change for 70s
+[14:49:08.236] ... alive, no change for 85s
+[14:49:13.450] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 08
+            ^  ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:49:13.562] IN  id=7 len=64  *** CHANGED ***
+           07 b7 08 08 08
+               ^  ^  ^   
+            0  1  2  3  4
+
+[14:49:13.578] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 08 08 0a 00 00 0a 05 00 08 08
+            ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:49:23.244] ... alive, no change for 9s
+[14:49:38.236] ... alive, no change for 24s
+[14:49:41.114] IN  id=7 len=64  *** CHANGED ***
+           07 b5 04 01 04
+            ^  ^  ^  ^   
+            0  1  2  3  4
+
+[14:49:41.210] IN  id=7 len=64  *** CHANGED ***
+           07 b7 00 08 01
+               ^  ^  ^  ^
+            0  1  2  3  4
+
+[14:49:41.258] IN  id=6 len=64  *** CHANGED ***
+           06 b0 00 02 04 01 00 08 0a 00 00 0a 05 00 04 01
+            ^  ^     ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^  ^
+            0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+
+[14:49:53.244] ... alive, no change for 11s
+[14:50:08.236] ... alive, no change for 26s
+[14:50:23.244] ... alive, no change for 41s
+[14:50:38.236] ... alive, no change for 56s
+[14:50:53.244] ... alive, no change for 71s
+[14:51:08.236] ... alive, no change for 86s
