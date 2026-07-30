@@ -138,9 +138,30 @@ enum Audio {
         devices().first { $0.uid == uid }
     }
 
-    /// First built-in device usable for `scope` - the last-resort fallback.
+    /// Canonical UIDs Apple uses for the internal speakers and microphone.
+    /// These are stable across reboots and macOS versions.
+    private static func canonicalBuiltInUID(_ scope: Scope) -> String {
+        switch scope {
+        case .output: return "BuiltInSpeakerDevice"
+        case .input: return "BuiltInMicrophoneDevice"
+        }
+    }
+
+    /// Last-resort fallback when the remembered device is unavailable.
+    ///
+    /// Prefers the canonical internal speaker/mic by UID. Selecting merely the
+    /// first device with a built-in transport type is unreliable: a Mac can
+    /// expose several (and aggregate or virtual devices sometimes report as
+    /// built-in), so "first match" can land on the wrong one.
     static func builtIn(for scope: Scope) -> AudioDevice? {
-        devices().first { $0.isBuiltIn && $0.supports(scope) }
+        let all = devices()
+        let wanted = canonicalBuiltInUID(scope)
+
+        if let exact = all.first(where: { $0.uid == wanted && $0.supports(scope) }) {
+            return exact
+        }
+        // Older or unusual hardware may not use the canonical UID.
+        return all.first { $0.isBuiltIn && $0.supports(scope) }
     }
 
     // MARK: - defaults

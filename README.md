@@ -2,6 +2,8 @@
 
 Automatic macOS audio switching for the **SteelSeries Arctis Nova Pro Wireless**.
 
+> **Apple Silicon (M-series) Macs only.**
+
 Turn the headset on, it becomes your default input and output. Turn it off,
 your previous devices come back.
 
@@ -27,6 +29,7 @@ This daemon listens to that and moves the default device accordingly.
 
 ## Requirements
 
+- **Apple Silicon (M-series) Mac only** — Intel Macs are not supported
 - macOS 12 or later
 - Arctis Nova Pro Wireless base station (USB `0x1038:0x12E0`)
 
@@ -34,6 +37,25 @@ No special permissions. The vendor HID usage page (`0xFFC0`) is not a protected
 one, so there is **no Input Monitoring prompt** and no kernel extension.
 
 ## Install
+
+### From a release
+
+```sh
+# Replace VERSION with the latest tag, e.g. 1.0.0
+curl -LO https://github.com/iankamin/arctis-audioswitch/releases/latest/download/arctis-audioswitch-VERSION-macos-arm64.tar.gz
+tar -xzf arctis-audioswitch-VERSION-macos-arm64.tar.gz
+cd arctis-audioswitch-VERSION
+./bin/arctis install    # symlink `arctis` into ~/.local/bin
+arctis enable           # start now, and at every login
+```
+
+macOS will quarantine a downloaded binary. If Gatekeeper blocks it:
+
+```sh
+xattr -d com.apple.quarantine build/arctis-audioswitch
+```
+
+### From source
 
 ```sh
 git clone https://github.com/iankamin/arctis-audioswitch.git
@@ -163,8 +185,10 @@ uninstall — the LaunchAgent is a system registration that outlives it.
 swift build -c release            # -> .build/release/arctis-audioswitch
 ```
 
-`bin/arctis` prefers the SwiftPM build and falls back to `build/` for
-`swiftc`-built checkouts.
+`bin/arctis` prefers the SwiftPM build and falls back to `build/`, which is the
+layout the release tarball ships.
+
+Released binaries are built for **arm64 only**, on an Apple Silicon runner.
 
 ## License
 

@@ -170,7 +170,9 @@ final class Switcher {
             let saved = savedUID.flatMap { Audio.device(uid: $0)?.name }
                 ?? savedUID.map { "\($0) (not connected)" }
                 ?? "(none recorded)"
+            let builtIn = Audio.builtIn(for: scope)?.name ?? "(none found)"
             lines.append("  \(scope.label): current=\(current)  fallback=\(saved)")
+            lines.append("    last resort (built-in): \(builtIn)")
         }
         return lines.joined(separator: "\n")
     }
