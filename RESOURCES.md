@@ -19,7 +19,8 @@ These persist beyond this chat session and beyond deleting the repo.
 |---|---|---|---|
 | Installed release | `~/.local/share/arctis-audioswitch/` | Directory (extracted v1.0.2 tarball) | **LIVE** |
 | CLI symlink | `~/.local/bin/arctis` | Symlink → the above | **LIVE** |
-| Persisted state | `~/Library/Application Support/ArctisNovaPro/state.json` | File (remembered fallback device UIDs) | **LIVE** |
+| Persisted state | `~/Library/Application Support/ArctisNovaPro/state.json` | File (remembered fallback device UIDs, daemon-owned) | **LIVE** |
+| User settings | `~/Library/Application Support/ArctisNovaPro/settings.json` | File (banner preference) | **LIVE** |
 | LaunchAgent plist | `~/Library/LaunchAgents/io.github.iankamin.arctis-audioswitch.plist` | File + `launchctl` registration | **LIVE** — created by `arctis enable` |
 | LaunchAgent job | `gui/$UID/io.github.iankamin.arctis-audioswitch` | launchd job (bootstrapped) | **LIVE** |
 
