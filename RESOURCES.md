@@ -40,9 +40,9 @@ launchd does not expand environment variables in plist paths, so `$TMPDIR` is
 resolved by `bin/arctis` and the absolute path is baked in when the plist is
 written.
 
-The daemon binary deliberately stays in `build/` inside this project rather
-than being copied to `~/.local/bin`, so it is not an external resource.
-(This changes if the project is repackaged for distribution.)
+The daemon binary lives inside whichever directory the release was unpacked
+into, and the LaunchAgent points at it there. `arctis install` symlinks rather
+than copies, so there is no second copy to go stale.
 
 ### Not created by us — do not touch
 - `~/Library/LaunchAgents/com.valvesoftware.steamclean.plist` — pre-existing, Steam's.
@@ -51,9 +51,9 @@ than being copied to `~/.local/bin`, so it is not an external resource.
 
 ### Published (outside this machine)
 - GitHub repo `iankamin/arctis-audioswitch` — **public**, pushed 2026-07-30.
-- Release `v1.0.0` with `arctis-audioswitch-1.0.0-macos-arm64.tar.gz`.
-  Not removable by `teardown.sh`; delete via
-  `gh release delete v1.0.0` and `gh repo delete` if ever needed.
+- Releases `v1.0.0` … `v1.2.0`, each with a tarball and `.sha256`.
+  Not removable by `teardown.sh`; delete with `gh release delete <tag>` and
+  `gh repo delete` if ever needed.
   The published captures contain audio device names (`X34 V`,
   `MacBook Pro Microphone`).
 
@@ -61,16 +61,17 @@ than being copied to `~/.local/bin`, so it is not an external resource.
 
 ## Inside the project directory
 
-Removed by deleting the project folder. `teardown.sh` does not delete these
-by default (use `./teardown.sh --all` to also wipe build output).
+Removed by deleting the project folder.
 
 | Resource | Path | Notes |
 |---|---|---|
-| Probe source | `tools/probe.swift` | Protocol reverse-engineering tool |
-| Probe binary | `build/probe` | Compiled, gitignored |
-| Daemon source | `Sources/main.swift` | (planned) |
-| Daemon binary | `build/arctis-audioswitch` | Compiled, gitignored |
-| Capture logs | `captures/*.log` | Raw HID dumps from probe runs |
+| Daemon source | `Sources/ArctisAudioSwitch/*.swift` | Tracked |
+| Probe source | `tools/probe.swift` | Protocol reverse-engineering tool, tracked |
+| Capture logs | `captures/*.log` | Raw HID dumps, tracked as protocol provenance |
+| Build output | `build/`, `.build/` | Gitignored, regenerate with `swift build -c release` |
+
+Build output is not currently present — it was removed after release, and
+`.build/` alone was ~129 MB.
 
 ---
 
@@ -81,8 +82,8 @@ session except the LaunchAgent.
 
 | Process | How started | How to stop | Status |
 |---|---|---|---|
-| `build/arctis-audioswitch --verbose` | Started by Claude for the live switching test, logging to `captures/daemon-test.log` | `arctis stop`, or `./teardown.sh` | **LIVE** (pid 99438 as of 2026-07-30 15:04) |
-| `build/probe` | Protocol capture, 5 instances | `./teardown.sh` | all stopped 2026-07-30 15:15 |
+| `arctis-audioswitch` | LaunchAgent, from the installed release | `arctis stop` / `arctis disable` | **LIVE** under launchd |
+| `build/probe` | Protocol capture during development | `./teardown.sh` | none running |
 
 ### Identifying our processes correctly
 
@@ -96,12 +97,24 @@ matched, and each "stopped" report was wrong.
 path:
 
 ```sh
-lsof -a -p "$pid" -d txt -Fn | grep '^n' | head -1 | cut -c2-
+lsof -a -p "$pid" -d txt -Fn | grep '^n' | cut -c2- | grep -qxF "$expected"
 ```
 
-`teardown.sh` now uses this, so it kills every instance regardless of how it
-was launched, and skips same-named processes belonging to anything else.
-Verify with `./teardown.sh --dry` before trusting a cleanup.
+`-d txt` lists the executable *and* every memory-mapped library, so test for
+the expected path rather than assuming the binary is the first row.
+
+`teardown.sh` uses this, so it kills every instance regardless of how it was
+launched, and skips same-named processes belonging to anything else. Verify
+with `./teardown.sh --dry` before trusting a cleanup.
+
+### Uninstalling the right copy
+
+Run `arctis uninstall`, not the project checkout's `teardown.sh`. Each
+`teardown.sh` scopes process and symlink removal to *its own* directory, so
+the checkout's copy will decline to remove a symlink owned by an installed
+release — while still removing the shared `Application Support` and log
+directories, since both use the same label. `arctis uninstall` runs the
+installed copy's teardown, which owns all of it.
 
 > This daemon was started directly, **not** via launchd — nothing is
 > registered with `launchctl` and no plist exists. It will not come back
