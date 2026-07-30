@@ -38,6 +38,16 @@ than being copied to `~/.local/bin`, so it is not an external resource.
 
 ### Not created by us — do not touch
 - `~/Library/LaunchAgents/com.valvesoftware.steamclean.plist` — pre-existing, Steam's.
+- `~/.local/bin/claude` — pre-existing symlink, not ours. `teardown.sh` only
+  removes `~/.local/bin/arctis`, and only when it points into this project.
+
+### Published (outside this machine)
+- GitHub repo `iankamin/arctis-audioswitch` — **public**, pushed 2026-07-30.
+- Release `v1.0.0` with `arctis-audioswitch-1.0.0-macos-arm64.tar.gz`.
+  Not removable by `teardown.sh`; delete via
+  `gh release delete v1.0.0` and `gh repo delete` if ever needed.
+  The published captures contain audio device names (`X34 V`,
+  `MacBook Pro Microphone`).
 
 ---
 
