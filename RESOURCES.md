@@ -17,9 +17,16 @@ These persist beyond this chat session and beyond deleting the repo.
 
 | Resource | Path / ID | Type | Status |
 |---|---|---|---|
-| Persisted state | `~/Library/Application Support/ArctisNovaPro/state.json` | File (remembered fallback device UIDs) | **LIVE** — created 2026-07-30 by the first switch |
-| LaunchAgent plist | `~/Library/LaunchAgents/io.github.iankamin.arctis-audioswitch.plist` | File + `launchctl` registration | PLANNED — only created by `arctis enable` / `arctis start` |
-| LaunchAgent job | `gui/$UID/io.github.iankamin.arctis-audioswitch` | launchd job (bootstrapped) | PLANNED — same |
+| Installed release | `~/.local/share/arctis-audioswitch/` | Directory (extracted v1.0.2 tarball) | **LIVE** |
+| CLI symlink | `~/.local/bin/arctis` | Symlink → the above | **LIVE** |
+| Persisted state | `~/Library/Application Support/ArctisNovaPro/state.json` | File (remembered fallback device UIDs) | **LIVE** |
+| LaunchAgent plist | `~/Library/LaunchAgents/io.github.iankamin.arctis-audioswitch.plist` | File + `launchctl` registration | **LIVE** — created by `arctis enable` |
+| LaunchAgent job | `gui/$UID/io.github.iankamin.arctis-audioswitch` | launchd job (bootstrapped) | **LIVE** |
+
+> Do **not** install into `~/Downloads`, `~/Desktop` or `~/Documents`. Those
+> are TCC-protected, so a LaunchAgent executing from them raises a
+> files-and-folders prompt at login and fails silently if denied. This was hit
+> during testing. `~/.local/share` is not protected.
 | Log output | `$TMPDIR/arctis-audioswitch/audioswitch.log` | File, **self-clearing** | PLANNED — written only when run under launchd |
 | Log output (stderr) | `$TMPDIR/arctis-audioswitch/audioswitch.err.log` | File, **self-clearing** | PLANNED — same |
 
