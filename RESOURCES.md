@@ -51,7 +51,7 @@ than copies, so there is no second copy to go stale.
 
 ### Published (outside this machine)
 - GitHub repo `iankamin/arctis-audioswitch` — **public**, pushed 2026-07-30.
-- Releases `v1.0.0` … `v1.2.0`, each with a tarball and `.sha256`.
+- Releases `v1.0.0` … `v1.2.2`, each with a tarball and `.sha256`.
   Not removable by `teardown.sh`; delete with `gh release delete <tag>` and
   `gh repo delete` if ever needed.
   The published captures contain audio device names (`X34 V`,
@@ -70,8 +70,9 @@ Removed by deleting the project folder.
 | Capture logs | `captures/*.log` | Raw HID dumps, tracked as protocol provenance |
 | Build output | `build/`, `.build/` | Gitignored, regenerate with `swift build -c release` |
 
-Build output is not currently present — it was removed after release, and
-`.build/` alone was ~129 MB.
+Build output **is currently present** — `swift build -c release` was run on
+2026-07-31 for the v1.2.2 replug fix. `.build/` alone is ~129 MB; remove it with
+`rm -rf .build build` once a release is cut.
 
 ---
 

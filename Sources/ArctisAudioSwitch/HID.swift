@@ -46,12 +46,40 @@ final class HIDMonitor {
     /// Called on every confirmed state transition. Repeat events for the state
     /// we are already in are filtered out before this fires.
     var onStateChange: ((HeadsetState) -> Void)?
+    /// Fires whenever the base station appears - at startup if it is already
+    /// plugged in, and again on every replug.
+    ///
+    /// `witnessed` is false for a station that was already there when we
+    /// started looking: it may have been plugged in for hours, so the headset
+    /// could be on and the state has to be asked for. It is true when we
+    /// watched the connect happen, and then the headset is always off - the
+    /// station is still bringing its wireless link up and cannot answer a
+    /// status query that early anyway.
+    var onAttach: ((_ witnessed: Bool) -> Void)?
+    /// Fires when the base station goes away. Audio is deliberately left alone:
+    /// unplugging the station is not the headset powering off.
+    var onDetach: (() -> Void)?
     var log: (String) -> Void = { _ in }
 
+    /// Whether the base station is plugged in right now.
+    var isAttached: Bool { device != nil }
+
     private var lastState: HeadsetState?
+    /// While seeding we record `lastState` without reporting a transition.
+    private var isSeeding = false
+    /// Set once the startup sweep has run, so the matching callback can tell a
+    /// station it watched arrive from one that was already there.
+    private var sweepComplete = false
+
+    private var idString: String {
+        String(format: "%04x:%04x", Self.vendorID, Self.productID)
+    }
 
     // MARK: - lifecycle
 
+    /// Opens the manager and attaches to the station if it is already plugged
+    /// in. Returns false only if the manager itself could not be opened - a
+    /// station that is not plugged in is not a failure, we wait for it.
     func start() -> Bool {
         let mgr = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         let matching: [String: Any] = [
@@ -61,21 +89,85 @@ final class HIDMonitor {
         ]
         IOHIDManagerSetDeviceMatching(mgr, matching as CFDictionary)
 
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        IOHIDManagerRegisterDeviceMatchingCallback(mgr, { ctx, result, _, device in
+            guard result == kIOReturnSuccess, let ctx = ctx else { return }
+            Unmanaged<HIDMonitor>.fromOpaque(ctx).takeUnretainedValue().attach(device)
+        }, context)
+        IOHIDManagerRegisterDeviceRemovalCallback(mgr, { ctx, _, _, device in
+            guard let ctx = ctx else { return }
+            Unmanaged<HIDMonitor>.fromOpaque(ctx).takeUnretainedValue().detach(device)
+        }, context)
+
+        // The manager has to be on the run loop for those two callbacks to fire
+        // at all. Scheduling only the device - which is what this used to do -
+        // binds us to the one IOHIDDevice that existed at launch; unplugging
+        // destroys it, replugging creates a new one, and we would sit holding
+        // the dead reference forever, alive but deaf.
+        IOHIDManagerScheduleWithRunLoop(mgr, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+
         guard IOHIDManagerOpen(mgr, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else {
+            IOHIDManagerUnscheduleFromRunLoop(mgr, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
             log("error: could not open IOHIDManager")
             return false
         }
-        guard let found = (IOHIDManagerCopyDevices(mgr) as? Set<IOHIDDevice>)?.first else {
-            log("error: base station not found (\(String(format: "%04x:%04x", Self.vendorID, Self.productID)))")
-            return false
-        }
-
-        manager = mgr
-        device = found
 
         let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
         buf.initialize(repeating: 0, count: bufferSize)
         buffer = buf
+        manager = mgr
+
+        // Claim a station that is already plugged in synchronously, so callers
+        // can query it without pumping the run loop first. The matching
+        // callback fires for this same device once the run loop turns; `attach`
+        // drops it as a duplicate.
+        if let found = currentDevice(of: mgr) {
+            attach(found)
+        } else {
+            log("base station \(idString) not attached; waiting for it")
+        }
+        sweepComplete = true
+        return true
+    }
+
+    func stop() {
+        if let device = device {
+            IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+        }
+        if let manager = manager {
+            IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        }
+        buffer?.deallocate()
+        buffer = nil
+        device = nil
+        manager = nil
+        sweepComplete = false
+    }
+
+    // MARK: - attach / detach
+
+    /// `IOHIDManagerCopyDevices` returns an unordered set. Only one interface
+    /// should match on this usage page, but pick deterministically rather than
+    /// leaving it to hash order if that ever stops being true.
+    private func currentDevice(of manager: IOHIDManager) -> IOHIDDevice? {
+        guard let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return nil }
+        return devices.min { lhs, rhs in
+            (locationID(of: lhs) ?? UInt32.max) < (locationID(of: rhs) ?? UInt32.max)
+        }
+    }
+
+    private func locationID(of device: IOHIDDevice) -> UInt32? {
+        (IOHIDDeviceGetProperty(device, kIOHIDLocationIDKey as CFString) as? NSNumber)?.uint32Value
+    }
+
+    private func attach(_ found: IOHIDDevice) {
+        // The startup sweep and the matching callback both report a station
+        // that was already plugged in; whichever gets there first wins.
+        guard device == nil, let buf = buffer else { return }
+
+        let witnessed = sweepComplete
+        device = found
 
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(found, buf, bufferSize, { ctx, result, _, _, reportID, report, length in
@@ -86,21 +178,34 @@ final class HIDMonitor {
         }, context)
 
         IOHIDDeviceScheduleWithRunLoop(found, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        log("watching base station \(String(format: "%04x:%04x", Self.vendorID, Self.productID)) usagePage 0x\(String(format: "%04x", Self.usagePage))")
-        return true
+
+        // Location is logged, never matched on - we find the station by
+        // identity so it works on any port or hub. It is here so that an odd
+        // report later can be tied to the station having moved.
+        let location = locationID(of: found).map { String(format: " location 0x%08x", $0) } ?? ""
+        log("watching base station \(idString) usagePage 0x\(String(format: "%04x", Self.usagePage))\(location)")
+
+        // Deferred: the handler re-seeds via queryInitialState(), which pumps
+        // the run loop, and nesting that inside a run-loop callback is asking
+        // for trouble.
+        DispatchQueue.main.async { [weak self] in
+            self?.onAttach?(witnessed)
+        }
     }
 
-    func stop() {
-        if let device = device {
-            IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        }
-        if let manager = manager {
-            IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        }
-        buffer?.deallocate()
-        buffer = nil
+    private func detach(_ lost: IOHIDDevice) {
+        guard let current = device, CFEqual(current, lost) else { return }
+
+        IOHIDDeviceUnscheduleFromRunLoop(current, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
         device = nil
-        manager = nil
+        // Nothing about the headset is observable while the station is gone, so
+        // forget the state rather than trusting it when the station returns.
+        lastState = nil
+        log("base station detached; waiting for it to come back")
+
+        DispatchQueue.main.async { [weak self] in
+            self?.onDetach?()
+        }
     }
 
     // MARK: - initial state
@@ -113,6 +218,9 @@ final class HIDMonitor {
     /// `06 b0` and pumps the run loop until that reply arrives.
     func queryInitialState(timeout: TimeInterval = 2.0) -> HeadsetState? {
         guard let device = device else { return nil }
+
+        isSeeding = true
+        defer { isSeeding = false }
 
         var cmd = Self.statusCommand
         guard IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(0), &cmd, cmd.count) == kIOReturnSuccess else {
@@ -129,6 +237,13 @@ final class HIDMonitor {
             log("initial state query: no reply within \(timeout)s")
         }
         return lastState
+    }
+
+    /// Record a state without reporting it as a transition. Used when we watch
+    /// the station being plugged in: the headset is always off at that moment,
+    /// and the station cannot answer `06 b0` that early.
+    func seed(_ state: HeadsetState) {
+        lastState = state
     }
 
     // MARK: - event handling
@@ -191,6 +306,10 @@ final class HIDMonitor {
     private func update(_ state: HeadsetState) {
         guard state != lastState else { return }
         lastState = state
+        // Seeding records where we are without claiming the user just did
+        // something. Firing here would have `switcher.apply` override whatever
+        // device they had chosen while the station was away.
+        guard !isSeeding else { return }
         onStateChange?(state)
     }
 

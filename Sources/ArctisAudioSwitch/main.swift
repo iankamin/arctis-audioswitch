@@ -10,7 +10,7 @@ import Foundation
 
 setvbuf(stdout, nil, _IONBF, 0)
 
-let version = "1.2.1"
+let version = "1.2.2"
 
 // ---------------------------------------------------------------- paths
 
@@ -130,8 +130,12 @@ case "status":
     let monitor = HIDMonitor()
     monitor.log = { print("  \($0)") }
     if monitor.start() {
-        let state = monitor.queryInitialState()
-        print("  headset: \(state?.rawValue ?? "unknown")")
+        if monitor.isAttached {
+            let state = monitor.queryInitialState()
+            print("  headset: \(state?.rawValue ?? "unknown")")
+        } else {
+            print("  headset: unknown (base station not plugged in)")
+        }
         monitor.stop()
     }
     exit(0)
@@ -148,27 +152,48 @@ let switcher = Switcher(stateURL: stateURL, log: log)
 let monitor = HIDMonitor()
 monitor.log = { debug($0) }
 
+// Only a manager that will not open is fatal. A station that is not plugged in
+// is normal - we wait for it. Exiting here used to be a permanent silent death:
+// KeepAlive is { Crashed: true }, and a clean exit is not a crash, so launchd
+// never retried if it started us before USB enumeration finished at login.
 guard monitor.start() else {
-    log("fatal: could not attach to the base station - is it plugged in?")
+    log("fatal: could not open IOHIDManager")
     exit(1)
 }
 
 switcher.startObserving()
 
-// A headset already on at launch produces no push event, so establish the
-// starting state explicitly rather than assuming it is off.
-if let initial = monitor.queryInitialState() {
-    log("initial headset state: \(initial.rawValue)")
-    // Deliberately not `apply` - at startup an already-off headset means the
-    // current devices are the user's own choice and must not be overridden.
-    switcher.applyInitial(initial)
-} else {
-    log("could not determine initial headset state; waiting for the next event")
-}
-
 monitor.onStateChange = { state in
     log("event: headset \(state.rawValue)")
     switcher.apply(state)
+}
+
+// Fires at startup if the station is already plugged in, and again on every
+// replug. Either way `applyInitial`, not `apply`: an off headset means the
+// current devices are the user's own choice and must not be overridden.
+monitor.onAttach = { witnessed in
+    if witnessed {
+        // We watched the station connect, so the headset is off, and the
+        // station is still bringing its wireless link up and cannot answer a
+        // status query yet. Seed it and wait for the power-on push event.
+        // applyInitial still earns its place here: macOS will sometimes make a
+        // newly appeared USB audio device the default on its own, and this
+        // pulls us back off the Arctis when it does.
+        monitor.seed(.disconnected)
+        log("base station attached; headset off")
+        switcher.applyInitial(.disconnected)
+    } else if let initial = monitor.queryInitialState() {
+        // Already plugged in when we started - it may have been for hours, so
+        // the headset could be on. No push event describes that, so ask.
+        log("initial headset state: \(initial.rawValue)")
+        switcher.applyInitial(initial)
+    } else {
+        log("could not determine initial headset state; waiting for the next event")
+    }
+}
+
+monitor.onDetach = {
+    log("base station unplugged; leaving audio as-is")
 }
 
 // Clean shutdown so launchd restarts are tidy.
