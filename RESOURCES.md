@@ -17,7 +17,7 @@ These persist beyond this chat session and beyond deleting the repo.
 
 | Resource | Path / ID | Type | Status |
 |---|---|---|---|
-| Installed release | `~/.local/share/arctis-audioswitch/` | Directory (extracted v1.0.2 tarball) | **LIVE** |
+| Installed release | `~/.local/share/arctis-audioswitch/` | Directory (extracted release tarball; `arctis update` replaces the contents in place, so the version is not recorded here — `arctis status` reports the live one) | **LIVE** |
 | CLI symlink | `~/.local/bin/arctis` | Symlink → the above | **LIVE** |
 | Persisted state | `~/Library/Application Support/ArctisNovaPro/state.json` | File (remembered fallback device UIDs, daemon-owned) | **LIVE** |
 | User settings | `~/Library/Application Support/ArctisNovaPro/settings.json` | File (banner preference) | **LIVE** |
