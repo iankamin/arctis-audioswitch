@@ -299,7 +299,7 @@ final class HIDMonitor {
         guard bytes.count > Self.statusConnectionByte + 1 else { return }
 
         let primary = bytes[Self.statusConnectionByte]        // 0x08 on / 0x04 off
-        let secondary = bytes[Self.statusConnectionByte + 1]  // 0x08 on / 0x01 off
+        let secondary = bytes[Self.statusConnectionByte + 1]  // meaning unresolved
 
         let state: HeadsetState
         switch primary {
@@ -308,12 +308,15 @@ final class HIDMonitor {
         default: return
         }
 
-        // Both bytes were confirmed binary and battery-independent; disagreement
-        // means the protocol assumption needs revisiting, so say so rather than
-        // silently trusting one.
-        let secondaryAgrees = (state == .connected) ? (secondary == 0x08) : (secondary == 0x01)
-        if !secondaryAgrees {
-            log("status bytes disagree: [14]=0x\(String(format: "%02x", primary)) [15]=0x\(String(format: "%02x", secondary)); trusting [14]")
+        // Byte 15 tracked the connection state in every capture, but
+        // richrace/arctis-usb-finder lists index 15 as *charging* status for
+        // this device - and the Nova Pro charges a spare battery in the base
+        // station, so the two correlate and the captures cannot tell them
+        // apart. Byte 14 is the one we trust. This is a note, not an alarm:
+        // a divergence is expected if the charging reading is the right one.
+        let tracksConnection = (state == .connected) ? (secondary == 0x08) : (secondary == 0x01)
+        if !tracksConnection {
+            log("[15]=0x\(String(format: "%02x", secondary)) diverged from [14]=0x\(String(format: "%02x", primary)); using [14]. See captures/protocol.md")
         }
 
         update(state)

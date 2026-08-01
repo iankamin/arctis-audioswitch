@@ -31,8 +31,25 @@ ON:  06 b0 00 02 04 01 XX 08 0a 00 00 0a 05 00 08 08
 | Byte | Meaning | Confidence |
 |---|---|---|
 | 6 | Battery level, `0x00` when headset off | **Confirmed** — tracked a battery swap: settled to `0x02` on a <50% cell, held `0x08` on a fresh one. Scale appears to be `0x00`–`0x08`; endpoints beyond those two samples are provisional. |
-| 14 | Connection: `0x08` = on, `0x04` = off | **Confirmed** — identical across both low- and high-battery cycles |
-| 15 | Connection: `0x08` = on, `0x01` = off | **Confirmed** — identical across both low- and high-battery cycles |
+| 14 | Connection: `0x08` = on, `0x04` = off | **Confirmed** — identical across both low- and high-battery cycles. This is the byte the daemon trusts. |
+| 15 | **Probably charging status**, not connection | **Unresolved** — see below |
+
+Byte 15 was originally recorded here as a second connection flag (`0x08` = on,
+`0x01` = off), because that is how it behaved across every capture. But
+[`richrace/arctis-usb-finder`](https://github.com/richrace/arctis-usb-finder)
+lists the Nova Pro Wireless with `chargingStatusIdx: 15` — the same index, read
+as *charging* status.
+
+That entry is worth weight: only 5 of its 21 devices specify the field at all,
+the values differ per device, and the Nova Pro's `batteryPercentIdx: 6`
+independently matches byte 6 above. It was derived for this hardware, not
+defaulted.
+
+Both readings fit the captures, because the Nova Pro charges a spare battery in
+the base station, so charging state and headset state can correlate. **Treat
+byte 15 as unidentified and do not trigger on it.** To settle it: keep the
+headset powered on and vary only the spare battery in the dock. If byte 15 moves
+with charging rather than with the headset, the external reading is right.
 
 Byte 6 is the trap: on the first power-on it reads `0x08`, which looks exactly
 like a connect flag until a battery swap separates them. Do not trigger on it.
