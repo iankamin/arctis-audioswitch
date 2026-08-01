@@ -124,6 +124,19 @@ a versioned and an unversioned tarball — the unversioned one exists so
 `/releases/latest/download/<name>` works without knowing the version. Then
 `arctis update` installs it and restarts the daemon.
 
+**`update` rewrites the LaunchAgent every time** (via `arctis sync`, since
+v1.3.1). It used to rewrite only when the recorded binary path had changed —
+which never happens, the install path is fixed — so a release that changed the
+plist shipped new code against the old plist and printed `LaunchAgent unchanged`
+while doing it. v1.3.0 hit exactly that and had to be repaired by hand with
+`arctis enable`. Note the fix only takes effect for the update *after* the one
+that delivers it, because the installed `update` is what runs the swap.
+
+`arctis sync` on its own is the repair for a stale LaunchAgent. Run the
+*installed* copy, never the one in the repo — `bin/arctis` resolves paths from
+its own location, so the repo copy would repoint the LaunchAgent at the repo
+build.
+
 Remove `build/` and `.build/` after cutting a release (~129MB).
 
 ## Diagnosing "audio stopped switching"

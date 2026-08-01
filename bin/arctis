@@ -255,6 +255,27 @@ cmd_enable() {
   return 0
 }
 
+# Rewrites the LaunchAgent to match this install, preserving the login setting.
+#
+# `update` calls this unconditionally. It used to rewrite the plist only when
+# the recorded binary path had changed, which is never - the install path is
+# fixed - so a release that changed the plist as well as the binary left the new
+# daemon running against the old LaunchAgent, and said "LaunchAgent unchanged"
+# while doing it. v1.3.0 is exactly that case: the daemon exits when the station
+# is absent and depends on a LaunchEvents entry to be restarted, so against a
+# v1.2.x plist it would have exited and stayed dead.
+cmd_sync() {
+  need_binary
+  if runs_at_login; then write_plist true; else write_plist false; fi
+  if is_loaded; then
+    reload_job
+    launchctl kickstart "$TARGET" >/dev/null 2>&1
+    echo "LaunchAgent synced; restarted daemon"
+  else
+    echo "LaunchAgent synced"
+  fi
+}
+
 cmd_disable() {
   if ! [ -f "$PLIST" ] && ! is_loaded; then
     echo "already disabled"
@@ -397,22 +418,15 @@ mv "$staged" "$PROJECT_DIR" || {
 }
 rm -rf "$PROJECT_DIR.old"
 
-# Only rewrite the plist if the recorded binary path is actually wrong.
-# Rewriting it unconditionally would churn a file launchd is watching for no
-# reason, and would reset RunAtLoad if that logic ever drifted.
-recorded="\$(/usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" 2>/dev/null)"
-if [ -f "$PLIST" ] && [ "\$recorded" != "$BIN" ]; then
-  echo "binary path changed, updating LaunchAgent"
-  echo "  was: \$recorded"
-  echo "  now: $BIN"
-  "$PROJECT_DIR/bin/arctis" enable >/dev/null 2>&1
-elif [ "$was_running" = "1" ]; then
+# Always rewrite the plist from the new install rather than trying to detect
+# whether it needs it. The old check compared only the recorded binary path,
+# which never changes, so a release that altered the plist was silently skipped.
+# Writing it every time is idempotent and cheap - update already boots the job
+# out and back in - and `sync` preserves the login setting.
+if [ "$was_running" = "1" ]; then
   launchctl bootstrap "gui/${UID_NUM}" "$PLIST" >/dev/null 2>&1
-  launchctl kickstart "$TARGET" >/dev/null 2>&1
-  echo "LaunchAgent unchanged; restarted daemon"
-else
-  echo "LaunchAgent unchanged"
 fi
+"$PROJECT_DIR/bin/arctis" sync
 
 echo "updated to \$("$BIN" --version 2>/dev/null)"
 rm -rf "$tmp"
@@ -469,6 +483,7 @@ ${bold}COMMANDS${reset}
   notify [on|off] show or set notification banners on device switches
   logs [-f]       show recent log output, -f to follow
 
+  sync            rewrite the LaunchAgent to match this install
   update          download and install the latest release
   build           rebuild from source (source checkouts only)
 
@@ -562,6 +577,7 @@ case "${1:-help}" in
   restart)   cmd_stop; cmd_start ;;
   enable)    cmd_enable ;;
   disable)   cmd_disable ;;
+  sync)      cmd_sync ;;
   status)    cmd_status ;;
   update)    shift; cmd_update "${1:-}" ;;
   notify)    shift; cmd_notify "${1:-}" ;;
