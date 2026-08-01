@@ -76,9 +76,11 @@ Removed by deleting the project folder.
 | Capture logs | `captures/*.log` | Raw HID dumps, tracked as protocol provenance |
 | Build output | `build/`, `.build/` | Gitignored, regenerate with `swift build -c release` |
 
-Build output **is currently present** — `swift build -c release` was run on
-2026-07-31 for the v1.2.2 replug fix. `.build/` alone is ~129 MB; remove it with
-`rm -rf .build build` once a release is cut.
+Build output is **not currently present** — removed 2026-07-31 after cutting
+v1.3.2. `.build/` had grown to 142 MB (it includes `index-build/`, the
+SourceKit-LSP index, if an editor has had the project open). Regenerate with
+`swift build -c release`; remove again with `rm -rf .build build` once a release
+is cut.
 
 ---
 
