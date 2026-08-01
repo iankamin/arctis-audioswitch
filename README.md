@@ -2,6 +2,13 @@
 
 Automatic macOS audio switching for the **SteelSeries Arctis Nova Pro Wireless**.
 
+## Why this exists
+
+The arctis nova pro has a windows only feature that will automatically switch the audio device when the headset is connected/disconnected.
+I wanted to have this feature on MacOS. Additionally that feature required downloading GG sonar software adding bloat.
+
+This is a light weight event driven service that will automatically switch the audio input and output devices when the headset is powered on/off.
+
 > **Apple Silicon (M-series) Macs only.**
 
 Turn the headset on, it becomes your default input and output. Turn it off,
@@ -17,24 +24,10 @@ $ arctis logs -f
 [15:03:25] headset off: input  -> MacBook Pro Microphone
 ```
 
-## Why this exists
-
-The base station stays enumerated as a USB audio device whether or not the
-headset is powered on. CoreAudio's device list is **identical** in both states,
-so macOS has no idea the headset came or went — it just keeps sending audio to
-a headset sitting on your desk, switched off.
-
-The base station does know, and says so over a vendor-defined HID interface.
-This daemon listens to that and moves the default device accordingly.
-
 ## Requirements
 
 - **Apple Silicon (M-series) Mac only** — Intel Macs are not supported
 - macOS 12 or later
-- Arctis Nova Pro Wireless base station (USB `0x1038:0x12E0`)
-
-No special permissions. The vendor HID usage page (`0xFFC0`) is not a protected
-one, so there is **no Input Monitoring prompt** and no kernel extension.
 
 ## Install
 
