@@ -210,20 +210,44 @@ Confirmed working (2026-07-31, from the daemon log):
 - **Login with the station present and the headset already on.** The unwitnessed
   path queried and got `initial headset state: connected`, then switched.
 
-Next steps (all against v1.3.1):
+## TODO
 
-1. **Watch `runs =`** over a day of normal use. A climbing count with no
-   corresponding plug events means the XPC event is not being drained and
-   launchd is relaunching. `ThrottleInterval` defaults to 10s, so a loop is
-   bounded but not harmless. Nothing seen so far, but one afternoon is not a
-   day.
-2. **Verify the login race**: log out with the station *unplugged*, log back
-   in, then plug in. The daemon is now *expected* to exit at login and be
-   restarted by device-attach, so this tests `LaunchEvents` at login rather than
-   the old waiting behaviour.
-3. **Verify sleep/wake**, which re-enumerates USB.
-4. Remove the build output once settled (`rm -rf .build build`) and update the
-   `RESOURCES.md` row.
+Open items, most useful first. Everything else from the v1.2.2 → v1.3.2 work is
+verified and closed.
+
+- [ ] **Identify byte 15 of report 6.** Recorded here as a second connection
+      flag; `richrace/arctis-usb-finder` lists the same index as *charging*
+      status for this device, and that entry looks derived rather than
+      defaulted. Both fit the captures because the Nova Pro charges a spare
+      battery in the base station.
+      **Test:** leave the headset powered on and vary only the spare battery in
+      the dock. If byte 15 moves with charging rather than with the headset, the
+      charging reading is right and `captures/protocol.md` can state it as fact.
+      Nothing depends on this — byte 14 is what the daemon trusts — so it is
+      curiosity, not risk.
+- [ ] **Identify bytes 2-3 of `07 b5`.** Two values seen, `04 01` and, after a
+      station cold boot, `01 00`. No theory. The daemon deliberately ignores
+      them now, so this is also curiosity. Neither
+      `richrace/arctis-usb-finder` nor the Nova 7 write-up at
+      `aarol.dev/posts/arctis-hid` covers push events at all — both poll — so
+      neither will answer this. A fresh capture across several cold boots would.
+- [ ] **Verify the login race**: log out with the station *unplugged*, log back
+      in, then plug in. The daemon is now *expected* to exit at login and be
+      restarted by device-attach, so this tests `LaunchEvents` at login rather
+      than the old waiting behaviour.
+- [ ] **Verify sleep/wake**, which re-enumerates USB. Likely fine — it is the
+      same detach/attach path replug exercises — but unconfirmed.
+
+Closed:
+
+- [x] **`runs =` respawn loop.** Retired 2026-07-31. Checked with the station
+      unplugged for 5.4 minutes, which is the condition that would expose it:
+      launchd relaunches, the daemon finds no station, exits, repeat. At the 10s
+      default `ThrottleInterval` that is ~30 relaunches expected; the counter
+      sat at 2, and every increment all day matched a real plug event. Note the
+      original worry was backwards — the loop is throttle-bounded and therefore
+      *fast*, so a few idle minutes test it better than a day of normal use.
+- [x] Build output removed and `RESOURCES.md` updated.
 
 Rollback is `gh release download v1.2.2`, which is also verified on hardware and
 stays resident.
