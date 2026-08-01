@@ -136,6 +136,28 @@ write_plist() {
         <key>Crashed</key>
         <true/>
     </dict>
+    <!-- Start the daemon when the base station is plugged in. It exits as soon
+         as the station is gone, so the process never outlives the device and
+         cannot end up holding a dead IOHIDDevice. RunAtLoad covers the other
+         ordering: a station already attached at login. IDs are decimal -
+         4152 = 0x1038, 4832 = 0x12E0. -->
+    <key>LaunchEvents</key>
+    <dict>
+        <key>com.apple.iokit.matching</key>
+        <dict>
+            <key>com.apple.device-attach</key>
+            <dict>
+                <key>IOProviderClass</key>
+                <string>IOUSBHostDevice</string>
+                <key>idVendor</key>
+                <integer>4152</integer>
+                <key>idProduct</key>
+                <integer>4832</integer>
+                <key>IOMatchLaunchStream</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
     <key>ProcessType</key>
     <string>Background</string>
     <key>StandardOutPath</key>

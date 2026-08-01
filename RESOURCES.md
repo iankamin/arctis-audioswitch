@@ -40,6 +40,12 @@ launchd does not expand environment variables in plist paths, so `$TMPDIR` is
 resolved by `bin/arctis` and the absolute path is baked in when the plist is
 written.
 
+Since v1.3.0 the plist also carries a `LaunchEvents` /
+`com.apple.iokit.matching` device-attach entry, so **the daemon is not a
+permanently resident process** — launchd starts it when the base station is
+plugged in and it exits when the station goes away. Expect no process at all
+when the station is unplugged; that is correct, not a failure.
+
 The daemon binary lives inside whichever directory the release was unpacked
 into, and the LaunchAgent points at it there. `arctis install` symlinks rather
 than copies, so there is no second copy to go stale.

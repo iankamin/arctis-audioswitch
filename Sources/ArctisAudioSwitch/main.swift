@@ -10,7 +10,7 @@ import Foundation
 
 setvbuf(stdout, nil, _IONBF, 0)
 
-let version = "1.2.2"
+let version = "1.3.0"
 
 // ---------------------------------------------------------------- paths
 
@@ -161,6 +161,25 @@ guard monitor.start() else {
     exit(1)
 }
 
+// launchd starts us from a com.apple.iokit.matching device-attach event, and
+// jobs launched that way are expected to consume it. Leaving it undrained lets
+// launchd treat the event as undelivered and relaunch - and since this process
+// exits as soon as the station is gone, that is the shape of a respawn loop.
+// The payload tells us nothing IOHIDManager has not already said, so this
+// handler exists purely to acknowledge. Must be registered before the run loop.
+xpc_set_event_stream_handler("com.apple.iokit.matching", DispatchQueue.main) { _ in
+    debug("drained a com.apple.iokit.matching event")
+}
+
+// Nothing to watch without the station. Exit rather than sitting resident: the
+// LaunchEvents entry in the plist has launchd start us again on device-attach.
+// RunAtLoad covers the other ordering - a station already present at login.
+guard monitor.isAttached else {
+    log("no base station; exiting until one is plugged in")
+    monitor.stop()
+    exit(0)
+}
+
 switcher.startObserving()
 
 monitor.onStateChange = { state in
@@ -188,12 +207,23 @@ monitor.onAttach = { witnessed in
         log("initial headset state: \(initial.rawValue)")
         switcher.applyInitial(initial)
     } else {
-        log("could not determine initial headset state; waiting for the next event")
+        // Launched from a device-attach event, the station is present but was
+        // plugged in seconds ago, so the sweep sees it as pre-existing while it
+        // is still too cold to answer `06 b0`. Silence here means exactly that,
+        // and the headset is always off at the moment the station connects.
+        monitor.seed(.disconnected)
+        log("station not answering yet; assuming headset off")
+        switcher.applyInitial(.disconnected)
     }
 }
 
+// Exit rather than hold a dead reference. launchd restarts us on the next
+// device-attach, so the process never outlives the station it is bound to -
+// which is what makes the stale-IOHIDDevice bug structurally impossible.
 monitor.onDetach = {
-    log("base station unplugged; leaving audio as-is")
+    log("base station unplugged; exiting until it comes back")
+    monitor.stop()
+    exit(0)
 }
 
 // Clean shutdown so launchd restarts are tidy.
