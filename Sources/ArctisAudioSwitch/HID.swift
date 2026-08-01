@@ -24,12 +24,19 @@ final class HIDMonitor {
     /// permission is required to open it.
     static let usagePage = 0xFFC0
 
-    // Connection event: 07 b5 04 01 XX
-    // Bytes 1-3 are a constant signature; byte 4 carries the state. Verified
-    // battery-independent across low- and high-battery power cycles, which is
-    // what rules out the battery byte in report 6 as a trigger.
+    // Connection event: 07 b5 ?? ?? XX
+    // Byte 1 is the subcommand and the only discriminator that matters - b5 is
+    // the connection event and nothing else produces one. Byte 4 carries the
+    // state, battery-independent across low- and high-battery power cycles.
+    //
+    // Bytes 2-3 were once believed to be part of a constant signature and were
+    // matched on as `04 01`. They are not constant. A station that had just
+    // cold-booted was captured emitting `07 b5 01 00 04` / `07 b5 01 00 08`,
+    // and because the old four-byte check failed silently, every power event
+    // was dropped with no log line - the daemon looked alive and did nothing.
+    // Match only on what carries meaning.
     private static let eventReportID: UInt32 = 7
-    private static let signature: [UInt8] = [0x07, 0xb5, 0x04, 0x01]
+    private static let eventSubcommand: UInt8 = 0xb5
     private static let stateConnected: UInt8 = 0x08
     private static let stateDisconnected: UInt8 = 0x04
 
@@ -259,12 +266,23 @@ final class HIDMonitor {
         }
     }
 
-    /// Report 7: `07 b5 04 01 XX`. Other subcommands (b7 battery, b9 volume,
-    /// 2e ANC/transparency, bd) differ at byte 1 and are rejected by the
-    /// signature check - verified against a capture that exercised volume,
-    /// ANC, transparency and EQ without producing a single b5.
+    /// Report 7: `07 b5 ?? ?? XX`. Other subcommands (b7 battery, b9 volume,
+    /// 2e ANC/transparency, bd) differ at byte 1 - verified against a capture
+    /// that exercised volume, ANC, transparency and EQ without producing a
+    /// single b5.
+    ///
+    /// Every rejection logs. This is verbose-only in the daemon, and a silent
+    /// `guard` here is exactly how a signature that stopped matching went
+    /// unnoticed while audio quietly stopped switching.
     private func handleEvent(_ bytes: [UInt8]) {
-        guard bytes.count >= 5, Array(bytes[0..<4]) == Self.signature else { return }
+        guard bytes.count >= 5 else {
+            log("report 7 too short (\(bytes.count) bytes): \(hex(bytes))")
+            return
+        }
+        guard bytes[1] == Self.eventSubcommand else {
+            log("ignoring report 7 subcommand 0x\(String(format: "%02x", bytes[1])): \(hex(bytes.prefix(5)))")
+            return
+        }
 
         switch bytes[4] {
         case Self.stateConnected: update(.connected)

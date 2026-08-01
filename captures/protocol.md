@@ -42,16 +42,28 @@ like a connect flag until a battery swap separates them. Do not trigger on it.
 The station **pushes** these on state change, ahead of any poll reply.
 
 ```
-headset ON       07 b5 04 01 08
+headset ON       07 b5 ?? ?? 08
                  07 b7 <batt> 08 08
 
-headset OFF      07 b5 04 01 04
+headset OFF      07 b5 ?? ?? 04
                  07 b7 00      08 01
 ```
 
-- `07 b5 04 01 XX` — dedicated connection event. Bytes 2,3 are constant
-  (`04 01`); **byte 4** is `0x08` = connected, `0x04` = disconnected.
-  Byte 4 was identical on low and high battery, so it is battery-independent.
+- `07 b5 ?? ?? XX` — dedicated connection event. **Byte 4** is `0x08` =
+  connected, `0x04` = disconnected. Byte 4 was identical on low and high
+  battery, so it is battery-independent.
+
+  **Bytes 2 and 3 are NOT constant.** This document previously called them a
+  constant signature of `04 01`, on the strength of the captures below, and
+  `HID.swift` matched all four bytes. On 2026-07-31 a station that had just
+  been unplugged and replugged was captured pushing `07 b5 01 00 04` and
+  `07 b5 01 00 08` — same events, different bytes 2-3. The four-byte match
+  failed silently and the daemon stopped switching audio while looking
+  perfectly healthy.
+
+  What bytes 2-3 encode is still unknown; only two values have been observed
+  (`04 01` and `01 00`), and the second appeared after a station cold boot.
+  **Do not match on them.** Byte 1 is the discriminator; byte 4 is the payload.
 - `07 b7 BB 08 YY` — battery + connection. `BB` = battery (`0x08` fresh,
   `0x02` low, `0x00` off); `YY` = `0x08` on / `0x01` off.
 - `07 b9 VV` — volume changed. `VV` stepped `09 08 07 06` while turning the
@@ -96,6 +108,10 @@ Debounce a little and act on `b5` alone to avoid double-switching.
   `06 b0` and watching bytes 14/15.
 - Exact battery scale endpoints (only two levels sampled).
 - What bytes 3,4,5,7,8,11,12 encode; constant across every capture so far.
+  Treat "constant across every capture so far" with suspicion — that is exactly
+  what was said about bytes 2-3 of `07 b5`, and it was wrong.
+- What bytes 2-3 of `07 b5` encode. Observed `04 01` and, after a station cold
+  boot, `01 00`. No theory yet.
 
 ## Captures
 

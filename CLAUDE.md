@@ -42,6 +42,26 @@ process to the one device object that existed at startup; unplugging destroys
 it, replugging creates a new one, and the daemon stays alive and healthy-looking
 while never hearing another report. That was the v1.2.1 bug.
 
+**Match `07 b5` on byte 1 and byte 4 only — bytes 2-3 are not constant.**
+`captures/protocol.md` used to call `07 b5 04 01 XX` a constant signature, and
+`HID.swift` matched all four bytes. On 2026-07-31 a station that had just been
+replugged began pushing `07 b5 01 00 XX` — same events, different bytes 2-3 —
+and the four-byte check dropped every power event *silently*, with no log line
+at any verbosity. The daemon looked perfectly healthy and audio simply stopped
+switching. Byte 1 is the subcommand discriminator; byte 4 is the state. What
+bytes 2-3 mean is still unknown.
+
+Diagnosing it took `tools/probe.swift --no-poll` running beside the daemon: the
+probe showed the events arriving on the wire ~100ms after the button, while the
+daemon logged nothing. **That side-by-side is the technique to reach for** when
+the daemon seems deaf — it separates "the station is not sending" from "we are
+not accepting".
+
+Beware of `arctis status` while diagnosing. It sends `06 b0`, and the reply goes
+to *every* open client, so it re-syncs the running daemon through
+`handleStatus`. That masked this bug repeatedly — state changes appeared to
+work, but only ever within a second of a status query.
+
 **Two protocol timing facts** (from Ian, not derivable from the captures):
 
 1. The station **cannot answer `06 b0` immediately** after being plugged in —
@@ -158,10 +178,21 @@ unplug. `arctis restart` worked around it.
 
 ## State as of v1.3.0 (2026-07-31)
 
-`LaunchEvents` shipped. The daemon now runs only while the station is attached.
-**Unverified at release time:** that device-attach actually starts it, and that
-`runs =` stays flat over a day of normal use. Both need watching — see
-"Next steps".
+`LaunchEvents` shipped, and **the full unplug/replug cycle is verified on
+hardware** (2026-07-31, v1.3.1):
+
+- Unplug → `base station unplugged; exiting until it comes back`,
+  `last exit code = 0`, no process left at all.
+- Replug → launchd restarted it ~1s later with no login and no manual command.
+  `runs` incremented 1 → 2, which is how you tell launchd did it: `arctis
+  restart` boots the job out and back in, resetting the count to 1, and leaves a
+  `stopping` line in the log. Neither appeared.
+- The cold-station path worked: `station not answering yet; assuming headset
+  off`, then the real `event: headset connected` a minute later once the
+  wireless link came up, and both defaults moved.
+
+Still worth watching: `runs =` over a day of normal use, for a climbing count
+that does not match plug events.
 
 ## v1.2.2 (2026-07-31) — superseded, kept for the verification record
 
@@ -179,28 +210,28 @@ Confirmed working (2026-07-31, from the daemon log):
 - **Login with the station present and the headset already on.** The unwitnessed
   path queried and got `initial headset state: connected`, then switched.
 
-Next steps (all against v1.3.0):
+Next steps (all against v1.3.1):
 
-1. **Verify `LaunchEvents` fires at all.** Unplug → the daemon should log
-   `base station unplugged; exiting until it comes back` and the process should
-   be *gone*. Replug → it should come back by itself, with no login and no
-   `arctis restart`. If it does not, `LaunchEvents` is not working and the
-   daemon must go back to staying resident — see the exit/`LaunchEvents`
-   coupling above.
-2. **Watch `runs =`** over a day of normal use. A climbing count with no
+1. **Watch `runs =`** over a day of normal use. A climbing count with no
    corresponding plug events means the XPC event is not being drained and
    launchd is relaunching. `ThrottleInterval` defaults to 10s, so a loop is
-   bounded but not harmless.
-3. **Verify the login race**: log out with the station *unplugged*, log back
-   in, then plug in. Under v1.3.0 the daemon is *expected* to exit at login and
-   be restarted by device-attach, so this now tests `LaunchEvents` rather than
+   bounded but not harmless. Nothing seen so far, but one afternoon is not a
+   day.
+2. **Verify the login race**: log out with the station *unplugged*, log back
+   in, then plug in. The daemon is now *expected* to exit at login and be
+   restarted by device-attach, so this tests `LaunchEvents` at login rather than
    the old waiting behaviour.
-4. **Verify sleep/wake**, which re-enumerates USB.
-5. Remove the build output once settled (`rm -rf .build build`) and update the
+3. **Verify sleep/wake**, which re-enumerates USB.
+4. Remove the build output once settled (`rm -rf .build build`) and update the
    `RESOURCES.md` row.
 
-Rollback is `gh release download v1.2.2`, which is verified working on hardware
-and stays resident.
+Rollback is `gh release download v1.2.2`, which is also verified on hardware and
+stays resident.
+
+**When reading the log during a test, watch for races.** The `event:` line and
+the `headset on:` lines it causes are written within the same second, so a
+`tail` fired immediately after a transition can show the event with no switch
+and look like a failure. It is not. Re-check before concluding anything.
 
 One unexplained observation: at the 19:58 login there were ~11s between
 `starting` and `watching for headset power events`. It resolved and worked, so
